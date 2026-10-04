@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config.dart';
-
+import 'ana_menu.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: supabaseUrl, anonKey: supabaseKey);
@@ -36,7 +36,7 @@ class GirisKontrol extends StatelessWidget {
         if (supabase.auth.currentSession == null) {
           return const GirisSayfasi();
         }
-        return const AnaSayfa();
+        return const AnaMenu();
       },
     );
   }
