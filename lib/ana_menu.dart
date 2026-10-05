@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'alislar.dart';
 import 'musteriler.dart';
 import 'servisler.dart';
+import 'stok.dart';
+import 'tedarikciler.dart';
 
 class AnaMenu extends StatelessWidget {
   const AnaMenu({super.key});
+
+  void _git(BuildContext context, Widget sayfa) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => sayfa));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,30 +30,39 @@ class AnaMenu extends StatelessWidget {
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 500),
-          child: Padding(
+          child: ListView(
             padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _Dugme(
-                  icon: Icons.build,
-                  yazi: 'Servis Kayıtları',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ServislerSayfasi()),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _Dugme(
-                  icon: Icons.people,
-                  yazi: 'Müşteriler',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const MusterilerSayfasi()),
-                  ),
-                ),
-              ],
-            ),
+            children: [
+              _Dugme(
+                icon: Icons.build,
+                yazi: 'Servis Kayıtları',
+                onTap: () => _git(context, const ServislerSayfasi()),
+              ),
+              const SizedBox(height: 16),
+              _Dugme(
+                icon: Icons.people,
+                yazi: 'Müşteriler',
+                onTap: () => _git(context, const MusterilerSayfasi()),
+              ),
+              const SizedBox(height: 16),
+              _Dugme(
+                icon: Icons.inventory_2,
+                yazi: 'Stok ve Parçalar',
+                onTap: () => _git(context, const StokSayfasi()),
+              ),
+              const SizedBox(height: 16),
+              _Dugme(
+                icon: Icons.add_shopping_cart,
+                yazi: 'Parça Alışları',
+                onTap: () => _git(context, const AlislarSayfasi()),
+              ),
+              const SizedBox(height: 16),
+              _Dugme(
+                icon: Icons.local_shipping,
+                yazi: 'Tedarikçiler',
+                onTap: () => _git(context, const TedarikcilerSayfasi()),
+              ),
+            ],
           ),
         ),
       ),
