@@ -8,6 +8,7 @@ import 'satislar.dart';
 import 'servisler.dart';
 import 'stok.dart';
 import 'tedarikciler.dart';
+import 'urunler.dart';
 
 /// Uygulamanın adı. İleride değiştirmek için sadece bu satırı değiştirin.
 const uygulamaAdi = 'Zarova Teknik Servis';
@@ -210,7 +211,7 @@ class AnaMenu extends StatelessWidget {
       const [
         _Oge(Icons.build, 'Servis Kayıtları', ServislerSayfasi()),
         _Oge(Icons.people, 'Müşteriler', MusterilerSayfasi()),
-        _Oge(Icons.inventory_2, 'Stok ve Parçalar', StokSayfasi()),
+        _Oge(Icons.inventory_2, 'Stok ve Parçalar', UrunlerSayfasi(bolum: 'teknik')),
         _Oge(Icons.add_shopping_cart, 'Parça Alışları', AlislarSayfasi()),
         _Oge(Icons.local_shipping, 'Tedarikçiler', TedarikcilerSayfasi()),
       ],
@@ -223,7 +224,7 @@ class AnaMenu extends StatelessWidget {
       const [
         _Oge(Icons.point_of_sale, 'Aksesuar Satışı', SatislarSayfasi()),
         _Oge(Icons.inventory, 'Aksesuar Stoku',
-            StokSayfasi(kategori: 'aksesuar')),
+            UrunlerSayfasi(bolum: 'aksesuar')),
         _Oge(Icons.add_shopping_cart, 'Aksesuar Alışı', AlislarSayfasi()),
       ],
     );
