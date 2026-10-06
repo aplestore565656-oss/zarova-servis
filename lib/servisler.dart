@@ -62,7 +62,7 @@ class _ServislerSayfasiState extends State<ServislerSayfasi> {
     try {
       final veri = await _db
           .from('service_records')
-          .select('*, customers(full_name, phone)')
+          .select('*, customers(full_name, phone), parts(name, brand, model)')
           .isFilter('deleted_at', null)
           .order('service_no', ascending: false);
       if (!mounted) return;
@@ -324,14 +324,10 @@ class _ServisFormuState extends State<ServisFormu> {
 
   String _t(String k) => (widget.kayit?[k] ?? '').toString();
 
-  String _n(String k) {
-    final v = widget.kayit?[k];
-    if (v == null) return '';
-    final d = (v as num).toDouble();
-    if (d == 0) return '';
-    return d == d.roundToDouble()
-        ? d.toInt().toString()
-        : d.toString().replaceAll('.', ',');
+  String? _ilkParcaAdi() {
+    final p = widget.kayit?['parts'] as Map<String, dynamic>?;
+    if (p == null) return null;
+    return '${p['name']} ${p['brand']} ${p['model']}'.trim();
   }
 
   late final _marka = TextEditingController(text: _t('brand'));
@@ -340,29 +336,47 @@ class _ServisFormuState extends State<ServisFormu> {
   late final _ariza = TextEditingController(text: _t('problem'));
   late final _islem = TextEditingController(text: _t('work_done'));
   late final _parca = TextEditingController(text: _t('part_used'));
-  late final _parcaMaliyet = TextEditingController(text: _n('part_cost'));
-  late final _iscilik = TextEditingController(text: _n('labor'));
-  late final _toplam = TextEditingController(text: _n('total'));
-  late final _odenen = TextEditingController(text: _n('paid'));
+  late final _parcaAdet = TextEditingController(
+      text: widget.kayit == null ? '' : sayiYaz(widget.kayit!['part_qty']));
+  late final _parcaMaliyet =
+      TextEditingController(text: sayiYaz(widget.kayit?['part_cost']));
+  late final _iscilik =
+      TextEditingController(text: sayiYaz(widget.kayit?['labor']));
+  late final _toplam =
+      TextEditingController(text: sayiYaz(widget.kayit?['total']));
+  late final _odenen =
+      TextEditingController(text: sayiYaz(widget.kayit?['paid']));
   late final _yapan = TextEditingController(text: _t('technician'));
   late final _not = TextEditingController(text: _t('note'));
 
   late String _durum = widget.kayit?['status'] ?? 'Bekliyor';
+    late String _tahsilEden = widget.kayit?['received_by'] ?? 'kasa';
   late String? _musteriId = widget.kayit?['customer_id'];
   late String? _musteriAd =
       (widget.kayit?['customers'] as Map<String, dynamic>?)?['full_name'];
+  late String? _parcaId = widget.kayit?['part_id'];
+  late String? _parcaAd = _ilkParcaAdi();
+  double? _alisFiyati;
+  int? _secStok;
   bool _kaydediliyor = false;
   String? _hata;
 
   @override
   void dispose() {
     for (final c in [
-      _marka, _model, _imei, _ariza, _islem, _parca,
+      _marka, _model, _imei, _ariza, _islem, _parca, _parcaAdet,
       _parcaMaliyet, _iscilik, _toplam, _odenen, _yapan, _not,
     ]) {
       c.dispose();
     }
     super.dispose();
+  }
+
+  void _maliyetiHesapla() {
+    if (_alisFiyati != null) {
+      final c = _alisFiyati! * tamSayi(_parcaAdet.text);
+      _parcaMaliyet.text = sayiYaz(c);
+    }
   }
 
   Future<void> _musteriSec() async {
@@ -391,12 +405,66 @@ class _ServisFormuState extends State<ServisFormu> {
     }
   }
 
+  Future<void> _parcaSec() async {
+    try {
+      final veri = await _db
+          .from('parts')
+          .select('id, name, brand, model, buy_price, stock')
+          .isFilter('deleted_at', null)
+          .order('name');
+      if (!mounted) return;
+      final liste = List<Map<String, dynamic>>.from(veri)
+          .map((p) => {
+                ...p,
+                'etiket': '${p['name']} ${p['brand']} ${p['model']}'.trim(),
+                'stokYazi': 'Stok: ${tam(p, 'stock')} adet',
+              })
+          .toList();
+      final p = await secimPenceresi(
+        context,
+        baslik: 'Stoktan parça seç',
+        liste: liste,
+        ana: 'etiket',
+        alt: 'stokYazi',
+      );
+      if (p != null) {
+        setState(() {
+          _parcaId = p['id'];
+          _parcaAd = p['etiket'];
+          _parca.text = '${p['etiket']}';
+          _alisFiyati = alan(p, 'buy_price');
+          _secStok = tam(p, 'stock');
+          if (_parcaAdet.text.trim().isEmpty) _parcaAdet.text = '1';
+          _maliyetiHesapla();
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _hata = 'Parçalar alınamadı: $e');
+    }
+  }
+
+  void _parcayiKaldir() {
+    setState(() {
+      _parcaId = null;
+      _parcaAd = null;
+      _alisFiyati = null;
+      _secStok = null;
+      _parcaAdet.text = '';
+    });
+  }
+
   Future<void> _kaydet() async {
     if (_musteriId == null) {
       setState(() => _hata = 'Önce müşteri seçin.');
       return;
     }
     if (!_anahtar.currentState!.validate()) return;
+    final adet = tamSayi(_parcaAdet.text);
+    if (_parcaId != null && adet <= 0) {
+      setState(() => _hata = 'Stoktan seçtiğiniz parça için adet yazın.');
+      return;
+    }
     setState(() {
       _kaydediliyor = true;
       _hata = null;
@@ -409,10 +477,13 @@ class _ServisFormuState extends State<ServisFormu> {
       'problem': _ariza.text.trim(),
       'work_done': _islem.text.trim(),
       'part_used': _parca.text.trim(),
+      'part_id': _parcaId,
+      'part_qty': _parcaId == null ? 0 : adet,
       'part_cost': sayi(_parcaMaliyet.text),
       'labor': sayi(_iscilik.text),
       'total': sayi(_toplam.text),
       'paid': sayi(_odenen.text),
+            'received_by': _tahsilEden,
       'status': _durum,
       'technician': _yapan.text.trim(),
       'note': _not.text.trim(),
@@ -443,7 +514,7 @@ class _ServisFormuState extends State<ServisFormu> {
       builder: (ctx) => AlertDialog(
         title: const Text('Servis kaydı silinsin mi?'),
         content: const Text(
-            'Kayıt listeden kalkar ama veritabanında saklanır, geri getirilebilir.'),
+            'Kayıt listeden kalkar ama veritabanında saklanır. Kullanılan parça stoğa geri döner.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -469,9 +540,11 @@ class _ServisFormuState extends State<ServisFormu> {
 
   Widget _girdi(TextEditingController c, String etiket,
       {bool sayiMi = false,
+      bool tamMi = false,
       bool zorunlu = false,
       int satir = 1,
-      bool hesapla = false}) {
+      bool hesapla = false,
+      bool maliyet = false}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
@@ -479,8 +552,13 @@ class _ServisFormuState extends State<ServisFormu> {
         maxLines: satir,
         keyboardType: sayiMi
             ? const TextInputType.numberWithOptions(decimal: true)
-            : TextInputType.text,
-        onChanged: hesapla ? (_) => setState(() {}) : null,
+            : (tamMi ? TextInputType.number : TextInputType.text),
+        onChanged: (hesapla || maliyet)
+            ? (_) {
+                if (maliyet) _maliyetiHesapla();
+                setState(() {});
+              }
+            : null,
         decoration: InputDecoration(
           labelText: etiket,
           border: const OutlineInputBorder(),
@@ -489,6 +567,25 @@ class _ServisFormuState extends State<ServisFormu> {
         validator: zorunlu
             ? (v) => (v == null || v.trim().isEmpty) ? 'Bu alanı doldurun' : null
             : null,
+      ),
+    );
+  }
+
+  Widget _stokUyarisi() {
+    if (_parcaId == null || _secStok == null) return const SizedBox.shrink();
+    final adet = tamSayi(_parcaAdet.text);
+    final eski = (widget.kayit != null &&
+            widget.kayit!['part_id'] == _parcaId &&
+            widget.kayit!['status'] != 'İptal')
+        ? tam(widget.kayit!, 'part_qty')
+        : 0;
+    final kullanilabilir = _secStok! + eski;
+    if (adet <= kullanilabilir) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        'Dikkat: Stokta $kullanilabilir adet var, kaydederseniz stok eksiye düşer.',
+        style: TextStyle(color: Colors.orange.shade900, fontSize: 15),
       ),
     );
   }
@@ -534,7 +631,35 @@ class _ServisFormuState extends State<ServisFormu> {
                 _girdi(_imei, 'IMEI'),
                 _girdi(_ariza, 'Arıza', zorunlu: true, satir: 2),
                 _girdi(_islem, 'Yapılan işlem', satir: 2),
-                _girdi(_parca, 'Takılan parça'),
+                const Text('Takılan parça', style: TextStyle(fontSize: 16)),
+                const SizedBox(height: 6),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.memory),
+                    title: Text(_parcaAd ?? 'Stoktan parça seçin (isteğe bağlı)'),
+                    subtitle: _parcaId == null
+                        ? const Text('Seçerseniz stoktan otomatik düşer')
+                        : null,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_parcaId != null)
+                          IconButton(
+                            icon: const Icon(Icons.clear),
+                            tooltip: 'Parçayı kaldır',
+                            onPressed: _parcayiKaldir,
+                          ),
+                        const Icon(Icons.search),
+                      ],
+                    ),
+                    onTap: _parcaSec,
+                  ),
+                ),
+                if (_parcaId != null)
+                  _girdi(_parcaAdet, 'Kullanılan adet',
+                      tamMi: true, maliyet: true),
+                _stokUyarisi(),
+                _girdi(_parca, 'Parça notu (stokta yoksa buraya yazın)'),
                 const Text('Durum', style: TextStyle(fontSize: 16)),
                 const SizedBox(height: 6),
                 Wrap(
@@ -554,6 +679,8 @@ class _ServisFormuState extends State<ServisFormu> {
                 _girdi(_toplam, 'Toplam ücret (müşteriden alınacak)',
                     sayiMi: true, hesapla: true),
                 _girdi(_odenen, 'Ödenen', sayiMi: true, hesapla: true),
+                                const Text('Parayı kim aldı?', style: TextStyle(fontSize: 16)),
+
                 Card(
                   color: kalan > 0 ? Colors.red.shade50 : Colors.green.shade50,
                   child: Padding(

@@ -5,7 +5,8 @@ import 'yardimci.dart';
 final _db = Supabase.instance.client;
 
 class StokSayfasi extends StatefulWidget {
-  const StokSayfasi({super.key});
+  final String kategori;
+  const StokSayfasi({super.key, this.kategori = 'parca'});
 
   @override
   State<StokSayfasi> createState() => _StokSayfasiState();
@@ -34,6 +35,7 @@ class _StokSayfasiState extends State<StokSayfasi> {
           .from('parts')
           .select('*, suppliers(name)')
           .isFilter('deleted_at', null)
+          .eq('category', widget.kategori)
           .order('name');
       if (!mounted) return;
       setState(() {
@@ -72,7 +74,9 @@ class _StokSayfasiState extends State<StokSayfasi> {
   Future<void> _ac([Map<String, dynamic>? parca]) async {
     final sonuc = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(builder: (_) => ParcaFormu(parca: parca)),
+MaterialPageRoute(
+          builder: (_) =>
+              ParcaFormu(parca: parca, kategori: widget.kategori)),
     );
     if (sonuc == true) _yukle();
   }
@@ -147,7 +151,9 @@ class _StokSayfasiState extends State<StokSayfasi> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Stok ve Parçalar'),
+title: Text(widget.kategori == 'aksesuar'
+            ? 'Aksesuar Stoku'
+            : 'Stok ve Parçalar'),
         actions: [
           IconButton(
               onPressed: _yukle,
@@ -199,7 +205,8 @@ class _StokSayfasiState extends State<StokSayfasi> {
 
 class ParcaFormu extends StatefulWidget {
   final Map<String, dynamic>? parca;
-  const ParcaFormu({super.key, this.parca});
+  final String kategori;
+  const ParcaFormu({super.key, this.parca, this.kategori = 'parca'});
 
   @override
   State<ParcaFormu> createState() => _ParcaFormuState();

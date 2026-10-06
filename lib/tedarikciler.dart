@@ -371,19 +371,7 @@ class _TedarikciDetaySayfasiState extends State<TedarikciDetaySayfasi> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const Text('Kim ödedi?'),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    children: odeyenler.entries
-                        .map((e) => ChoiceChip(
-                              label: Text(e.value),
-                              selected: odeyen == e.key,
-                              onSelected: (_) => setS(() => odeyen = e.key),
-                            ))
-                        .toList(),
-                  ),
-                  const SizedBox(height: 12),
+
                   TextField(
                     controller: not,
                     decoration: const InputDecoration(
