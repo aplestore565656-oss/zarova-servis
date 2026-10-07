@@ -9,6 +9,7 @@ import 'servisler.dart';
 import 'stok.dart';
 import 'tedarikciler.dart';
 import 'urunler.dart';
+import 'gun_raporu.dart';
 
 /// Uygulamanın adı. İleride değiştirmek için sadece bu satırı değiştirin.
 const uygulamaAdi = 'Zarova Teknik Servis';
@@ -249,6 +250,14 @@ class AnaMenu extends StatelessWidget {
               ),
             ),
             actions: [
+              TextButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const GunRaporuSayfasi()),
+                ),
+                icon: const Icon(Icons.event_note),
+                label: const Text('Günlük rapor'),
+              ),
               TextButton.icon(
                 onPressed: () => Supabase.instance.client.auth.signOut(),
                 icon: const Icon(Icons.logout),
