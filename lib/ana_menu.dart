@@ -225,7 +225,7 @@ class AnaMenu extends StatelessWidget {
         _Oge(Icons.point_of_sale, 'Aksesuar Satışı', SatislarSayfasi()),
         _Oge(Icons.inventory, 'Aksesuar Stoku',
             UrunlerSayfasi(bolum: 'aksesuar')),
-        _Oge(Icons.add_shopping_cart, 'Aksesuar Alışı', AlislarSayfasi()),
+        _Oge(Icons.add_shopping_cart, 'Aksesuar Alışı', AlislarSayfasi(bolum: 'aksesuar')),
       ],
     );
 
