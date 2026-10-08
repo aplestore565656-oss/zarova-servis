@@ -5,9 +5,12 @@ import 'alislar.dart';
 import 'gun_raporu.dart';
 import 'kasa.dart';
 import 'musteriler.dart';
+import 'ozet.dart';
+import 'raporlar.dart';
 import 'servisler.dart';
 import 'tedarikciler.dart';
 import 'urunler.dart';
+import 'yedek.dart';
 
 /// Uygulamanın adı. İleride değiştirmek için sadece bu satırı değiştirin.
 const uygulamaAdi = 'Zarova Teknik Servis';
@@ -151,26 +154,37 @@ class _Oge {
   const _Oge(this.ikon, this.yazi, this.renk, this.sayfa);
 }
 
-class AnaMenu extends StatelessWidget {
+const _mavi = Color(0xFF38BDF8);
+const _yesil = Color(0xFF34D399);
+const _turuncu = Color(0xFFFBBF24);
+const _mor = Color(0xFFA78BFA);
+
+const _ogeler = <_Oge>[
+  _Oge(Icons.build, 'Servis Kayıtları', _mavi, ServislerSayfasi()),
+  _Oge(Icons.people, 'Müşteriler', _mavi, MusterilerSayfasi()),
+  _Oge(Icons.inventory_2, 'Stok ve Parçalar', _mavi,
+      UrunlerSayfasi(bolum: 'teknik')),
+  _Oge(Icons.add_shopping_cart, 'Parça Alışları', _mavi, AlislarSayfasi()),
+  _Oge(Icons.local_shipping, 'Tedarikçiler', _mavi, TedarikcilerSayfasi()),
+  _Oge(Icons.account_balance_wallet, 'Kasa', _yesil, KasaSayfasi()),
+  _Oge(Icons.event_note, 'Günlük Rapor', _turuncu, GunRaporuSayfasi()),
+  _Oge(Icons.bar_chart, 'Raporlar', _turuncu, RaporlarSayfasi()),
+  _Oge(Icons.cloud_download, 'Yedekleme', _mor, YedekSayfasi()),
+];
+
+class AnaMenu extends StatefulWidget {
   const AnaMenu({super.key});
 
-  static const _mavi = Color(0xFF38BDF8);
-  static const _yesil = Color(0xFF34D399);
-  static const _turuncu = Color(0xFFFBBF24);
+  @override
+  State<AnaMenu> createState() => _AnaMenuState();
+}
 
-  static const _ogeler = <_Oge>[
-    _Oge(Icons.build, 'Servis Kayıtları', _mavi, ServislerSayfasi()),
-    _Oge(Icons.people, 'Müşteriler', _mavi, MusterilerSayfasi()),
-    _Oge(Icons.inventory_2, 'Stok ve Parçalar', _mavi,
-        UrunlerSayfasi(bolum: 'teknik')),
-    _Oge(Icons.add_shopping_cart, 'Parça Alışları', _mavi, AlislarSayfasi()),
-    _Oge(Icons.local_shipping, 'Tedarikçiler', _mavi, TedarikcilerSayfasi()),
-    _Oge(Icons.account_balance_wallet, 'Kasa', _yesil, KasaSayfasi()),
-    _Oge(Icons.event_note, 'Günlük Rapor', _turuncu, GunRaporuSayfasi()),
-  ];
+class _AnaMenuState extends State<AnaMenu> {
+  int _yenile = 0;
 
-  void _git(BuildContext context, Widget sayfa) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => sayfa));
+  Future<void> _git(Widget sayfa) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => sayfa));
+    if (mounted) setState(() => _yenile++);
   }
 
   @override
@@ -204,20 +218,23 @@ class AnaMenu extends StatelessWidget {
           ),
           body: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
+              constraints: const BoxConstraints(maxWidth: 640),
               child: ListView(
                 padding: const EdgeInsets.all(20),
-                children: _ogeler
-                    .map((o) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _CamDugme(
-                            ikon: o.ikon,
-                            yazi: o.yazi,
-                            renk: o.renk,
-                            onTap: () => _git(context, o.sayfa),
-                          ),
-                        ))
-                    .toList(),
+                children: [
+                  OzetPaneli(key: ValueKey(_yenile)),
+                  ..._ogeler.map(
+                    (o) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _CamDugme(
+                        ikon: o.ikon,
+                        yazi: o.yazi,
+                        renk: o.renk,
+                        onTap: () => _git(o.sayfa),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
