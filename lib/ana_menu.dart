@@ -2,14 +2,12 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'alislar.dart';
+import 'gun_raporu.dart';
 import 'kasa.dart';
 import 'musteriler.dart';
-import 'satislar.dart';
 import 'servisler.dart';
-import 'stok.dart';
 import 'tedarikciler.dart';
 import 'urunler.dart';
-import 'gun_raporu.dart';
 
 /// Uygulamanın adı. İleride değiştirmek için sadece bu satırı değiştirin.
 const uygulamaAdi = 'Zarova Teknik Servis';
@@ -148,88 +146,35 @@ class _YildizCizici extends CustomPainter {
 class _Oge {
   final IconData ikon;
   final String yazi;
+  final Color renk;
   final Widget sayfa;
-  const _Oge(this.ikon, this.yazi, this.sayfa);
+  const _Oge(this.ikon, this.yazi, this.renk, this.sayfa);
 }
 
 class AnaMenu extends StatelessWidget {
   const AnaMenu({super.key});
 
   static const _mavi = Color(0xFF38BDF8);
-  static const _pembe = Color(0xFFF472B6);
   static const _yesil = Color(0xFF34D399);
+  static const _turuncu = Color(0xFFFBBF24);
+
+  static const _ogeler = <_Oge>[
+    _Oge(Icons.build, 'Servis Kayıtları', _mavi, ServislerSayfasi()),
+    _Oge(Icons.people, 'Müşteriler', _mavi, MusterilerSayfasi()),
+    _Oge(Icons.inventory_2, 'Stok ve Parçalar', _mavi,
+        UrunlerSayfasi(bolum: 'teknik')),
+    _Oge(Icons.add_shopping_cart, 'Parça Alışları', _mavi, AlislarSayfasi()),
+    _Oge(Icons.local_shipping, 'Tedarikçiler', _mavi, TedarikcilerSayfasi()),
+    _Oge(Icons.account_balance_wallet, 'Kasa', _yesil, KasaSayfasi()),
+    _Oge(Icons.event_note, 'Günlük Rapor', _turuncu, GunRaporuSayfasi()),
+  ];
 
   void _git(BuildContext context, Widget sayfa) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => sayfa));
   }
 
-  Widget _kolon(BuildContext context, String baslik, IconData ikon,
-      Color renk, List<_Oge> ogeler) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 14),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(ikon, color: renk, size: 22),
-              const SizedBox(width: 8),
-              Text(
-                baslik,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5,
-                  color: renk,
-                ),
-              ),
-            ],
-          ),
-        ),
-        ...ogeler.map(
-          (o) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _CamDugme(
-              ikon: o.ikon,
-              yazi: o.yazi,
-              renk: renk,
-              onTap: () => _git(context, o.sayfa),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final teknik = _kolon(
-      context,
-      'TEKNİK SERVİS',
-      Icons.build_circle,
-      _mavi,
-      const [
-        _Oge(Icons.build, 'Servis Kayıtları', ServislerSayfasi()),
-        _Oge(Icons.people, 'Müşteriler', MusterilerSayfasi()),
-        _Oge(Icons.inventory_2, 'Stok ve Parçalar', UrunlerSayfasi(bolum: 'teknik')),
-        _Oge(Icons.add_shopping_cart, 'Parça Alışları', AlislarSayfasi()),
-        _Oge(Icons.local_shipping, 'Tedarikçiler', TedarikcilerSayfasi()),
-      ],
-    );
-    final aksesuar = _kolon(
-      context,
-      'AKSESUAR',
-      Icons.headphones,
-      _pembe,
-      const [
-        _Oge(Icons.point_of_sale, 'Aksesuar Satışı', SatislarSayfasi()),
-        _Oge(Icons.inventory, 'Aksesuar Stoku',
-            UrunlerSayfasi(bolum: 'aksesuar')),
-        _Oge(Icons.add_shopping_cart, 'Aksesuar Alışı', AlislarSayfasi(bolum: 'aksesuar')),
-      ],
-    );
-
     return Theme(
       data: ThemeData(
           brightness: Brightness.dark,
@@ -251,14 +196,6 @@ class AnaMenu extends StatelessWidget {
             ),
             actions: [
               TextButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const GunRaporuSayfasi()),
-                ),
-                icon: const Icon(Icons.event_note),
-                label: const Text('Günlük rapor'),
-              ),
-              TextButton.icon(
                 onPressed: () => Supabase.instance.client.auth.signOut(),
                 icon: const Icon(Icons.logout),
                 label: const Text('Çıkış'),
@@ -267,38 +204,20 @@ class AnaMenu extends StatelessWidget {
           ),
           body: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 940),
-              child: LayoutBuilder(
-                builder: (context, kisit) {
-                  final genis = kisit.maxWidth >= 700;
-                  return ListView(
-                    padding: const EdgeInsets.all(20),
-                    children: [
-                      if (genis)
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: teknik),
-                            const SizedBox(width: 24),
-                            Expanded(child: aksesuar),
-                          ],
-                        )
-                      else ...[
-                        teknik,
-                        const SizedBox(height: 12),
-                        aksesuar,
-                      ],
-                      const SizedBox(height: 8),
-                      _CamDugme(
-                        ikon: Icons.account_balance_wallet,
-                        yazi: 'Kasa',
-                        renk: _yesil,
-                        onTap: () => _git(context, const KasaSayfasi()),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                  );
-                },
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: _ogeler
+                    .map((o) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _CamDugme(
+                            ikon: o.ikon,
+                            yazi: o.yazi,
+                            renk: o.renk,
+                            onTap: () => _git(context, o.sayfa),
+                          ),
+                        ))
+                    .toList(),
               ),
             ),
           ),

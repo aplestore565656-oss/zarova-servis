@@ -547,7 +547,17 @@ class _TedarikciDetaySayfasiState extends State<TedarikciDetaySayfasi> {
     }
   }
 
-  Future<void> _alisEkle() async {
+Future<void> _alisEkle() async {
+    final s = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+          builder: (_) => AlisFormu(bolum: 'teknik', tedarikci: _t)),
+    );
+    if (s == true) _yukle();
+  }
+
+  // ignore: unused_element
+  Future<void> _eskiAlisEkle() async {
     final bolum = await showDialog<String>(
       context: context,
       builder: (ctx) => SimpleDialog(
