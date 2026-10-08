@@ -4,6 +4,9 @@ import 'alislar.dart' show hataMetni, odemeYontemleri, bugunTarih;
 import 'ana_menu.dart' show YildizArkaplan;
 import 'musteriler.dart' show musteriFormuAc;
 import 'yardimci.dart';
+import 'ayarlar.dart' show UstaSecici;
+import 'foto.dart' show FotoPaneli;
+import 'servis_formu.dart' show servisFormuYazdir;
 
 final _db = Supabase.instance.client;
 
@@ -704,6 +707,7 @@ class _ServisFormuState extends State<ServisFormu> {
                       'Teslim notları (şifre/PIN, SIM, yanındaki eşyalar)',
                       satir: 2),
                   _girdi(_usta, 'İşlemi yapan usta'),
+                  UstaSecici(controller: _usta),
                   _girdi(_garanti, 'Garanti süresi (gün)', tamMi: true),
                   if (_yeni) ...[
                     const Padding(
@@ -1415,6 +1419,7 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
               ),
             );
           }),
+         FotoPaneli(servisId: '${o['id']}'),
           _baslik('Durum geçmişi'),
           ..._gecmis.map((h) => ListTile(
                 dense: true,
@@ -1440,7 +1445,13 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
               IconButton(
                   onPressed: o == null ? null : _duzenle,
                   icon: const Icon(Icons.edit),
-                  tooltip: 'Bilgileri düzenle'),
+                tooltip: 'Bilgileri düzenle'),
+              IconButton(
+                  onPressed: o == null
+                      ? null
+                      : () => servisFormuYazdir(context, o, _kalemler, _s),
+                  icon: const Icon(Icons.print),
+                  tooltip: 'Servis formu (PDF)'),
             ],
           ),
           body: Center(

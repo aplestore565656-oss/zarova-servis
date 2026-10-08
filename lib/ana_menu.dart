@@ -11,6 +11,10 @@ import 'servisler.dart';
 import 'tedarikciler.dart';
 import 'urunler.dart';
 import 'yedek.dart';
+import 'arama.dart';
+import 'ayarlar.dart';
+import 'hurda.dart';
+import 'iadeler.dart';
 
 /// Uygulamanın adı. İleride değiştirmek için sadece bu satırı değiştirin.
 const uygulamaAdi = 'Zarova Teknik Servis';
@@ -160,6 +164,7 @@ const _turuncu = Color(0xFFFBBF24);
 const _mor = Color(0xFFA78BFA);
 
 const _ogeler = <_Oge>[
+   _Oge(Icons.search, 'Genel Arama', _turuncu, AramaSayfasi()),
   _Oge(Icons.build, 'Servis Kayıtları', _mavi, ServislerSayfasi()),
   _Oge(Icons.people, 'Müşteriler', _mavi, MusterilerSayfasi()),
   _Oge(Icons.inventory_2, 'Stok ve Parçalar', _mavi,
@@ -169,7 +174,10 @@ const _ogeler = <_Oge>[
   _Oge(Icons.account_balance_wallet, 'Kasa', _yesil, KasaSayfasi()),
   _Oge(Icons.event_note, 'Günlük Rapor', _turuncu, GunRaporuSayfasi()),
   _Oge(Icons.bar_chart, 'Raporlar', _turuncu, RaporlarSayfasi()),
+   _Oge(Icons.recycling, 'Hurda Cihazlar', _mavi, HurdaSayfasi()),
+  _Oge(Icons.assignment_return, 'İadeler', _mavi, IadelerSayfasi()),
   _Oge(Icons.cloud_download, 'Yedekleme', _mor, YedekSayfasi()),
+  _Oge(Icons.settings, 'Ayarlar', _mor, AyarlarSayfasi()),
 ];
 
 class AnaMenu extends StatefulWidget {
