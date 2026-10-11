@@ -147,6 +147,9 @@ class _GirisSayfasiState extends State<GirisSayfasi> {
                       TextField(
                         controller: _eposta,
                         keyboardType: TextInputType.emailAddress,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        textCapitalization: TextCapitalization.none,
                         decoration: const InputDecoration(
                           labelText: 'E-posta',
                           prefixIcon: Icon(Icons.mail_outline),
@@ -157,6 +160,8 @@ class _GirisSayfasiState extends State<GirisSayfasi> {
                       TextField(
                         controller: _sifre,
                         obscureText: true,
+                        autocorrect: false,
+                        enableSuggestions: false,
                         onSubmitted: (_) => _girisYap(),
                         decoration: const InputDecoration(
                           labelText: 'Şifre',
