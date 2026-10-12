@@ -143,7 +143,13 @@ class _GirisSayfasiState extends State<GirisSayfasi> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 6),
+                          const Text(
+                            'Sürüm $uygulamaSurumu',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12, color: Colors.white54),
+                          ),
+                          const SizedBox(height: 22),
                       TextField(
                         controller: _eposta,
                         keyboardType: TextInputType.emailAddress,

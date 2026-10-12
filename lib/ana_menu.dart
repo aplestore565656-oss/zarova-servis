@@ -18,6 +18,7 @@ import 'iadeler.dart';
 
 /// Uygulamanın adı. İleride değiştirmek için sadece bu satırı değiştirin.
 const uygulamaAdi = 'Zarova Teknik Servis';
+const uygulamaSurumu = '1.0.0';
 
 class _Yildiz {
   final double x, y, boyut, faz;
@@ -205,7 +206,15 @@ class _AnaMenuState extends State<AnaMenu> {
       child: YildizArkaplan(
         child: Scaffold(
           backgroundColor: Colors.transparent,
-          appBar: AppBar(
+          bottomNavigationBar: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Text('Sürüm $uygulamaSurumu',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: Colors.white54)),
+          ),
+        ),
+        appBar: AppBar(
             backgroundColor: Colors.transparent,
             elevation: 0,
             scrolledUnderElevation: 0,
