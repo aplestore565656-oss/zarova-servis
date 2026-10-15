@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'ana_menu.dart' show YildizArkaplan;
 import 'yardimci.dart';
+import 'kur.dart';
 
 final _db = Supabase.instance.client;
 
@@ -505,6 +506,9 @@ class _UrunFormuState extends State<UrunFormu> {
                       _girdi(_model, 'Model'),
                       _girdi(_uyumlu, 'Uyumlu cihaz'),
                       _girdi(_alis, 'Alış fiyatı', sayiMi: true, para: true),
+                      DolarCeviri(
+                          hedef: _alis,
+                          etiket: 'Alış fiyatını dolar olarak girin'),
                       _girdi(_satis, 'Satış fiyatı', sayiMi: true, para: true),
                       if (yeniMi)
                         _girdi(_baslangic, 'Başlangıç stoğu (elinizdeki adet)',

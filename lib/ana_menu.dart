@@ -10,6 +10,7 @@ import 'raporlar.dart';
 import 'servisler.dart';
 import 'tedarikciler.dart';
 import 'urunler.dart';
+import 'kur.dart';
 import 'yedek.dart';
 import 'arama.dart';
 import 'ayarlar.dart';
@@ -18,7 +19,7 @@ import 'iadeler.dart';
 
 /// Uygulamanın adı. İleride değiştirmek için sadece bu satırı değiştirin.
 const uygulamaAdi = 'Zarova Teknik Servis';
-const uygulamaSurumu = '1.0.0';
+const uygulamaSurumu = '1.1.0';
 
 class _Yildiz {
   final double x, y, boyut, faz;
@@ -239,6 +240,7 @@ class _AnaMenuState extends State<AnaMenu> {
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
+                const KurRozeti(),
                   OzetPaneli(key: ValueKey(_yenile)),
                   ..._ogeler.map(
                     (o) => Padding(

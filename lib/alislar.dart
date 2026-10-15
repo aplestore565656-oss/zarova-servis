@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'ana_menu.dart' show YildizArkaplan;
+import 'kur.dart';
 import 'yardimci.dart';
 
 final _db = Supabase.instance.client;
@@ -27,6 +28,14 @@ String hataMetni(Object e) =>
     e is PostgrestException ? e.message : e.toString();
 
 int _kurus(String s) => (sayi(s) * 100).round();
+int _d4(String s) => (sayi(s) * 10000).round();
+
+/// Dolar × kur = TL kuruş. Tamsayı hesabı, sunucudaki yuvarlamayla birebir aynı.
+int _tlKurus(String usdYazi, String kurYazi) =>
+    (_d4(usdYazi) * _d4(kurYazi) + 500000) ~/ 1000000;
+
+String dolarYaz(num n) => '\$${n.toStringAsFixed(2).replaceAll('.', ',')}';
+String kurYaz(num n) => n.toStringAsFixed(4).replaceAll('.', ',');
 
 class AlislarSayfasi extends StatefulWidget {
   final String bolum;
@@ -209,9 +218,9 @@ class _Satir {
   final String ad;
   final TextEditingController adet;
   final TextEditingController fiyat;
-  _Satir(this.urunId, this.ad, double alisFiyati)
+  _Satir(this.urunId, this.ad, String fiyatYazi)
       : adet = TextEditingController(text: '1'),
-        fiyat = TextEditingController(text: sayiYaz(alisFiyati));
+        fiyat = TextEditingController(text: fiyatYazi);
 
   void dispose() {
     adet.dispose();
@@ -234,8 +243,12 @@ class _AlisFormuState extends State<AlisFormu> {
   final List<_Satir> _satirlar = [];
   final _odenen = TextEditingController();
   final _not = TextEditingController();
+  final _kur = TextEditingController();
   String _yontem = 'nakit';
   DateTime _tarih = DateTime.now();
+  bool _dolarMod = false;
+  bool _kurYukleniyor = false;
+  String? _kurNotu;
   bool _kaydediliyor = false;
   String? _hata;
 
@@ -246,11 +259,63 @@ class _AlisFormuState extends State<AlisFormu> {
     }
     _odenen.dispose();
     _not.dispose();
+    _kur.dispose();
     super.dispose();
   }
 
+  int _birimKurus(_Satir s) =>
+      _dolarMod ? _tlKurus(s.fiyat.text, _kur.text) : _kurus(s.fiyat.text);
+
   int get _toplamKurus => _satirlar.fold<int>(
-      0, (t, s) => t + tamSayi(s.adet.text) * _kurus(s.fiyat.text));
+      0, (t, s) => t + tamSayi(s.adet.text) * _birimKurus(s));
+
+  int get _toplamUsd4 => _satirlar.fold<int>(
+      0, (t, s) => t + tamSayi(s.adet.text) * _d4(s.fiyat.text));
+
+  int get _odenenKurus {
+    if (!_dolarMod) return _kurus(_odenen.text);
+    final p4 = _d4(_odenen.text);
+    if (p4 <= 0) return 0;
+    if (p4 >= _toplamUsd4) return _toplamKurus;
+    final k = _tlKurus(_odenen.text, _kur.text);
+    return k > _toplamKurus ? _toplamKurus : k;
+  }
+
+  bool get _fazlaOdeme => _dolarMod
+      ? _d4(_odenen.text) > _toplamUsd4
+      : _kurus(_odenen.text) > _toplamKurus;
+
+  Future<void> _kurGetir() async {
+    setState(() {
+      _kurYukleniyor = true;
+      _kurNotu = null;
+    });
+    final k = await dolarKuruGetir();
+    if (!mounted) return;
+    setState(() {
+      _kurYukleniyor = false;
+      if (k == null) {
+        _kurNotu = 'Kur otomatik alınamadı. Kuru elle yazabilirsiniz.';
+      } else {
+        _kur.text = k.satis.toStringAsFixed(4).replaceAll('.', ',');
+        _kurNotu =
+            'Kaynak: TCMB döviz satış kuru (${k.tarih}). Kendi kurunuzu yazarak değiştirebilirsiniz.';
+      }
+    });
+  }
+
+  void _paraBirimi(bool dolar) {
+    if (_dolarMod == dolar) return;
+    setState(() {
+      _dolarMod = dolar;
+      for (final s in _satirlar) {
+        s.fiyat.text = '';
+      }
+      _odenen.text = '';
+      _hata = null;
+    });
+    if (dolar && _kur.text.trim().isEmpty) _kurGetir();
+  }
 
   Future<void> _tedarikciSec() async {
     try {
@@ -310,7 +375,8 @@ class _AlisFormuState extends State<AlisFormu> {
           final s = varMi.first;
           s.adet.text = '${tamSayi(s.adet.text) + 1}';
         } else {
-          _satirlar.add(_Satir(p['id'], '${p['etiket']}', alan(p, 'buy_price')));
+          final fiyatYazi = _dolarMod ? '' : sayiYaz(alan(p, 'buy_price'));
+          _satirlar.add(_Satir(p['id'], '${p['etiket']}', fiyatYazi));
         }
       });
     } catch (e) {
@@ -344,8 +410,11 @@ class _AlisFormuState extends State<AlisFormu> {
         return;
       }
     }
-    final odenenKurus = _kurus(_odenen.text);
-    if (odenenKurus > _toplamKurus) {
+    if (_dolarMod && _d4(_kur.text) <= 0) {
+      setState(() => _hata = 'Dolar kurunu yazın.');
+      return;
+    }
+    if (_fazlaOdeme) {
       setState(() => _hata = 'Ödenen tutar toplamdan fazla olamaz.');
       return;
     }
@@ -353,20 +422,33 @@ class _AlisFormuState extends State<AlisFormu> {
       _kaydediliyor = true;
       _hata = null;
     });
+    final kalemler = _satirlar.map((s) {
+      final q = tamSayi(s.adet.text);
+      if (_dolarMod) {
+        return {
+          'product_id': s.urunId,
+          'qty': q,
+          'currency': 'USD',
+          'unit_cost_fx': _d4(s.fiyat.text) / 10000,
+          'fx_rate': _d4(_kur.text) / 10000,
+          'unit_cost': _birimKurus(s) / 100,
+        };
+      }
+      return {
+        'product_id': s.urunId,
+        'qty': q,
+        'currency': 'TRY',
+        'unit_cost': _kurus(s.fiyat.text) / 100,
+      };
+    }).toList();
     try {
       await _db.rpc('create_purchase', params: {
         'p_supplier': _tedarikciId,
         'p_section': widget.bolum,
         'p_date': _tarih.toIso8601String().substring(0, 10),
         'p_note': _not.text.trim(),
-        'p_items': _satirlar
-            .map((s) => {
-                  'product_id': s.urunId,
-                  'qty': tamSayi(s.adet.text),
-                  'unit_cost': _kurus(s.fiyat.text) / 100,
-                })
-            .toList(),
-        'p_paid': odenenKurus / 100,
+        'p_items': kalemler,
+        'p_paid': _odenenKurus / 100,
         'p_method': _yontem,
       });
       if (!mounted) return;
@@ -380,8 +462,22 @@ class _AlisFormuState extends State<AlisFormu> {
     }
   }
 
+  Widget _ozetSatir(String a, String b, {Color? renk}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(a, style: const TextStyle(fontSize: 16)),
+            Text(b,
+                style: TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.bold, color: renk)),
+          ],
+        ),
+      );
+
   Widget _satirKarti(_Satir s) {
-    final tutar = tamSayi(s.adet.text) * _kurus(s.fiyat.text) / 100;
+    final q = tamSayi(s.adet.text);
+    final birim = _birimKurus(s);
     return Card(
       key: ObjectKey(s),
       child: Padding(
@@ -424,10 +520,11 @@ class _AlisFormuState extends State<AlisFormu> {
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                        labelText: 'Birim fiyat',
-                        suffixText: '₺',
-                        border: OutlineInputBorder()),
+                    decoration: InputDecoration(
+                        labelText:
+                            _dolarMod ? 'Birim fiyat (dolar)' : 'Birim fiyat',
+                        suffixText: _dolarMod ? '\$' : '₺',
+                        border: const OutlineInputBorder()),
                   ),
                 ),
               ],
@@ -435,7 +532,9 @@ class _AlisFormuState extends State<AlisFormu> {
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerRight,
-              child: Text('Kalem toplamı: ${para(tutar)}'),
+              child: Text(_dolarMod
+                  ? 'Birim ${para(birim / 100)} • Kalem ${para(q * birim / 100)}'
+                  : 'Kalem toplamı: ${para(q * birim / 100)}'),
             ),
           ],
         ),
@@ -446,7 +545,7 @@ class _AlisFormuState extends State<AlisFormu> {
   @override
   Widget build(BuildContext context) {
     final toplam = _toplamKurus / 100;
-    final odenen = _kurus(_odenen.text) / 100;
+    final odenen = _odenenKurus / 100;
     final kalan = toplam - odenen;
     return Theme(
       data: _koyu(),
@@ -481,6 +580,66 @@ class _AlisFormuState extends State<AlisFormu> {
                       onTap: _tarihSec,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  const Text('Alış para birimi', style: TextStyle(fontSize: 16)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Türk Lirası (₺)'),
+                        selected: !_dolarMod,
+                        onSelected: (_) => _paraBirimi(false),
+                      ),
+                      ChoiceChip(
+                        label: const Text('Dolar (\$)'),
+                        selected: _dolarMod,
+                        onSelected: (_) => _paraBirimi(true),
+                      ),
+                    ],
+                  ),
+                  if (_dolarMod) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _kur,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            onChanged: (_) => setState(() {}),
+                            decoration: const InputDecoration(
+                              labelText: '1 dolar kaç TL?',
+                              suffixText: '₺',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          height: 56,
+                          child: OutlinedButton.icon(
+                            onPressed: _kurYukleniyor ? null : _kurGetir,
+                            icon: _kurYukleniyor
+                                ? const SizedBox(
+                                    height: 18,
+                                    width: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2))
+                                : const Icon(Icons.refresh),
+                            label: const Text('Güncel kur'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        '${_kurNotu ?? ''}${_kurNotu == null ? '' : '\n'}Geçmiş tarihli alış giriyorsanız o günün kurunu yazın.',
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ),
+                  ],
                   const Padding(
                     padding: EdgeInsets.fromLTRB(4, 12, 4, 6),
                     child: Text('Ürünler',
@@ -502,12 +661,22 @@ class _AlisFormuState extends State<AlisFormu> {
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      labelText: 'Şimdi ödenen (ödemediyseniz boş bırakın)',
-                      suffixText: '₺',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: _dolarMod
+                          ? 'Şimdi ödenen (dolar)'
+                          : 'Şimdi ödenen (ödemediyseniz boş bırakın)',
+                      suffixText: _dolarMod ? '\$' : '₺',
+                      border: const OutlineInputBorder(),
                     ),
                   ),
+                  if (_dolarMod)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Ödeme kasadan TL karşılığıyla düşer. Ödemediyseniz boş bırakın.',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,
@@ -527,32 +696,19 @@ class _AlisFormuState extends State<AlisFormu> {
                       padding: const EdgeInsets.all(14),
                       child: Column(
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Toplam',
-                                  style: TextStyle(fontSize: 16)),
-                              Text(para(toplam),
-                                  style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Tedarikçiye kalan borç',
-                                  style: TextStyle(fontSize: 16)),
-                              Text(para(kalan < 0 ? 0 : kalan),
-                                  style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: kalan > 0
-                                          ? Colors.redAccent
-                                          : Colors.greenAccent)),
-                            ],
-                          ),
+                          if (_dolarMod)
+                            _ozetSatir('Toplam (dolar)',
+                                dolarYaz(_toplamUsd4 / 10000)),
+                          _ozetSatir(
+                              _dolarMod ? 'Toplam (TL karşılığı)' : 'Toplam',
+                              para(toplam)),
+                          if (_dolarMod && odenen > 0)
+                            _ozetSatir('Ödenen (TL karşılığı)', para(odenen)),
+                          _ozetSatir('Tedarikçiye kalan borç',
+                              para(kalan < 0 ? 0 : kalan),
+                              renk: kalan > 0
+                                  ? Colors.redAccent
+                                  : Colors.greenAccent),
                         ],
                       ),
                     ),
@@ -739,11 +895,14 @@ class _AlisDetaySayfasiState extends State<AlisDetaySayfasi> {
                       final ad =
                           '${p?['name'] ?? ''} ${p?['brand'] ?? ''} ${p?['model'] ?? ''}'
                               .trim();
+                      final usd = '${k['currency']}' == 'USD';
                       return Card(
                         child: ListTile(
+                          isThreeLine: usd,
                           title: Text(ad),
-                          subtitle: Text(
-                              '${tam(k, 'qty')} adet × ${para(alan(k, 'unit_cost'))}'),
+                          subtitle: Text(usd
+                              ? '${tam(k, 'qty')} adet × ${dolarYaz(alan(k, 'unit_cost_fx'))} • kur ${kurYaz(alan(k, 'fx_rate'))}\nBirim ${para(alan(k, 'unit_cost'))}'
+                              : '${tam(k, 'qty')} adet × ${para(alan(k, 'unit_cost'))}'),
                           trailing: Text(
                               para(tam(k, 'qty') * alan(k, 'unit_cost')),
                               style:
