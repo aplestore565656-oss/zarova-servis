@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'alislar.dart' show hataMetni, odemeYontemleri;
 import 'ortak.dart';
+import 'kur.dart';
 import 'yardimci.dart';
 
 final _db = Supabase.instance.client;
@@ -404,6 +405,127 @@ class _HurdaDetayState extends State<HurdaDetay> {
   }
 
   Future<void> _parcaEkle() async {
+    final sec = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Hangi parça?'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'yeni'),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('Yeni parça yaz (örn. ekran, batarya)',
+                  style: TextStyle(fontSize: 17)),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'stok'),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('Stoktaki parçalardan seç',
+                  style: TextStyle(fontSize: 17)),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (sec == null) return;
+    if (sec == 'stok') {
+      await _parcaEkleEski();
+      return;
+    }
+    final ad = TextEditingController();
+    final adet = TextEditingController(text: '1');
+    final deger = TextEditingController();
+    String? hata;
+    final tamam = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('Sökülen yeni parça'),
+          content: SizedBox(
+            width: 400,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: ad,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                        labelText: 'Parça adı (örn. iPhone 11 ekran)',
+                        border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: adet,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                        labelText: 'Adet', border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: deger,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                        labelText: 'Birim değer (₺, bilmiyorsanız boş)',
+                        suffixText: '₺',
+                        border: OutlineInputBorder()),
+                  ),
+                  const SizedBox(height: 10),
+                  DolarCeviri(
+                      hedef: deger, etiket: 'Değeri dolar olarak girin'),
+                  if (hata != null)
+                    Text(hata!,
+                        style: const TextStyle(color: Colors.redAccent)),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Vazgeç')),
+            FilledButton(
+              onPressed: () {
+                if (ad.text.trim().isEmpty) {
+                  setS(() => hata = 'Parça adını yazın.');
+                  return;
+                }
+                if (tamSayi(adet.text) <= 0) {
+                  setS(() => hata = 'Adet 1 veya daha fazla olmalı.');
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Stoğa ekle'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (tamam != true) return;
+    try {
+      final r = await _db.from('products').insert({
+        'section': 'teknik',
+        'name': ad.text.trim(),
+        'buy_price': (sayi(deger.text) * 100).round() / 100,
+        'note': 'Hurda cihazdan sökülen parça',
+      }).select('id').single();
+      await _db.rpc('add_scrap_part', params: {
+        'p_scrap': _h!['id'],
+        'p_product': r['id'],
+        'p_qty': tamSayi(adet.text),
+      });
+      await _yukle();
+    } catch (e) {
+      if (!mounted) return;
+      bildir(context, 'Eklenemedi: ${hataMetni(e)}');
+    }
+  }
+
+  Future<void> _parcaEkleEski() async {
     try {
       final veri = await _db
           .from('products')

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'ana_menu.dart';
 import 'config.dart';
+import 'gezinme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,7 +20,15 @@ class ZarovaApp extends StatelessWidget {
     return MaterialApp(
       title: uygulamaAdi,
       debugShowCheckedModeBanner: false,
+      navigatorKey: navigatorAnahtari,
+      navigatorObservers: [DerinlikGozlemci()],
       theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
+      builder: (context, child) => Stack(
+        children: [
+          Positioned.fill(child: child ?? const SizedBox.shrink()),
+          const AnaMenuDugmesi(),
+        ],
+      ),
       home: const GirisKontrol(),
     );
   }
@@ -105,102 +114,108 @@ class _GirisSayfasiState extends State<GirisSayfasi> {
               padding: const EdgeInsets.all(24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
-                child: Container(
-                  padding: const EdgeInsets.all(28),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.07),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.15)),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.cyan.withValues(alpha: 0.15),
-                          blurRadius: 40),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Icon(
-                        Icons.auto_awesome,
-                        size: 64,
-                        color: Colors.cyanAccent,
-                        shadows: [
-                          Shadow(color: Colors.cyanAccent, blurRadius: 24)
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(28),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.15)),
+                        boxShadow: [
+                          BoxShadow(
+                              color: Colors.cyan.withValues(alpha: 0.15),
+                              blurRadius: 40),
                         ],
                       ),
-                      const SizedBox(height: 14),
-                      const Text(
-                        uygulamaAdi,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          shadows: [
-                            Shadow(color: Colors.cyanAccent, blurRadius: 18)
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 6),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Icon(
+                            Icons.auto_awesome,
+                            size: 64,
+                            color: Colors.cyanAccent,
+                            shadows: [
+                              Shadow(color: Colors.cyanAccent, blurRadius: 24)
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          const Text(
+                            uygulamaAdi,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(color: Colors.cyanAccent, blurRadius: 18)
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 6),
                           const Text(
                             'Sürüm $uygulamaSurumu',
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 12, color: Colors.white54),
+                            style:
+                                TextStyle(fontSize: 12, color: Colors.white54),
                           ),
                           const SizedBox(height: 22),
-                      TextField(
-                        controller: _eposta,
-                        keyboardType: TextInputType.emailAddress,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        textCapitalization: TextCapitalization.none,
-                        decoration: const InputDecoration(
-                          labelText: 'E-posta',
-                          prefixIcon: Icon(Icons.mail_outline),
-                          border: OutlineInputBorder(),
-                        ),
+                          TextField(
+                            controller: _eposta,
+                            keyboardType: TextInputType.emailAddress,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            textCapitalization: TextCapitalization.none,
+                            decoration: const InputDecoration(
+                              labelText: 'E-posta',
+                              prefixIcon: Icon(Icons.mail_outline),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _sifre,
+                            obscureText: true,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            onSubmitted: (_) => _girisYap(),
+                            decoration: const InputDecoration(
+                              labelText: 'Şifre',
+                              prefixIcon: Icon(Icons.lock_outline),
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          if (_hata != null) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              _hata!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  color: Colors.redAccent, fontSize: 16),
+                            ),
+                          ],
+                          const SizedBox(height: 24),
+                          SizedBox(
+                            height: 52,
+                            child: FilledButton(
+                              onPressed: _yukleniyor ? null : _girisYap,
+                              child: _yukleniyor
+                                  ? const SizedBox(
+                                      height: 24,
+                                      width: 24,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 3))
+                                  : const Text('Giriş Yap',
+                                      style: TextStyle(fontSize: 18)),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _sifre,
-                        obscureText: true,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        onSubmitted: (_) => _girisYap(),
-                        decoration: const InputDecoration(
-                          labelText: 'Şifre',
-                          prefixIcon: Icon(Icons.lock_outline),
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      if (_hata != null) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          _hata!,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              color: Colors.redAccent, fontSize: 16),
-                        ),
-                      ],
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        height: 52,
-                        child: FilledButton(
-                          onPressed: _yukleniyor ? null : _girisYap,
-                          child: _yukleniyor
-                              ? const SizedBox(
-                                  height: 24,
-                                  width: 24,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 3))
-                              : const Text('Giriş Yap',
-                                  style: TextStyle(fontSize: 18)),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),

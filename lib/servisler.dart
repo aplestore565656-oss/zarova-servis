@@ -4,6 +4,7 @@ import 'alislar.dart' show hataMetni, odemeYontemleri, bugunTarih;
 import 'ana_menu.dart' show YildizArkaplan;
 import 'musteriler.dart' show musteriFormuAc;
 import 'yardimci.dart';
+import 'parca_ekle.dart';
 import 'ayarlar.dart' show UstaSecici;
 import 'foto.dart' show FotoPaneli;
 import 'servis_formu.dart' show servisFormuYazdir;
@@ -85,7 +86,7 @@ void _mesaj(BuildContext c, String m) {
 }
 
 /// Parça / işlem kalemi penceresi. Stoktan parça veya serbest yazılan kalem verir.
-Future<Map<String, dynamic>?> kalemDialogu(BuildContext context) {
+Future<Map<String, dynamic>?> kalemDialoguEski(BuildContext context) {
   final ad = TextEditingController();
   final adet = TextEditingController(text: '1');
   final fiyat = TextEditingController();
@@ -984,7 +985,7 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
     }
   }
 
-  Future<void> _odemeAl() async {
+  Future<void> _odemeAlEski() async {
     final kalanKurus = (_sv('remaining') * 100).round();
     if (kalanKurus <= 0) {
       _mesaj(context, 'Bu serviste kalan tutar görünmüyor.');
@@ -1087,6 +1088,153 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
     if (tamam == true) _yukle();
   }
 
+  Future<void> _odemeAl() async {
+    final o = _o;
+    if (o == null) return;
+    final toplam = _sv('total');
+    final odenen = _sv('paid');
+    final maliyet = _sv('parts_cost');
+    final kalanKurus = ((toplam - odenen) * 100).round();
+    final tutar = TextEditingController(
+        text: kalanKurus > 0 ? sayiYaz(kalanKurus / 100) : '');
+    String yontem = 'nakit';
+    String? hata;
+    final sonuc = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) {
+          final girilen = _k(tutar.text);
+          final fazla = girilen - kalanKurus;
+          final yeniToplam = fazla > 0 ? toplam + fazla / 100 : toplam;
+          final kar = yeniToplam - maliyet;
+          return AlertDialog(
+            title: const Text('Müşteriden para al'),
+            content: SizedBox(
+              width: 400,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                        'Servis toplamı ${para(toplam)} • alınan ${para(odenen)} • parça maliyeti ${para(maliyet)}',
+                        style: const TextStyle(fontSize: 13)),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: tutar,
+                      autofocus: true,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      onChanged: (_) => setS(() {}),
+                      decoration: const InputDecoration(
+                          labelText: 'Şimdi müşteriden alınan tutar',
+                          suffixText: '₺',
+                          border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      children: odemeYontemleri.entries
+                          .map((e) => ChoiceChip(
+                                label: Text(e.value),
+                                selected: yontem == e.key,
+                                onSelected: (_) =>
+                                    setS(() => yontem = e.key),
+                              ))
+                          .toList(),
+                    ),
+                    if (fazla > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Text(
+                            'Aldığınız tutar servis toplamını ${para(fazla / 100)} aşıyor. Fazlası işçilik / ek ücret olarak eklenir.',
+                            style: TextStyle(
+                                color: Colors.orange.shade300, fontSize: 13)),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text('Bu servisten kâr: ${para(kar)}',
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.bold)),
+                    ),
+                    if (hata != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(hata!,
+                            style: const TextStyle(color: Colors.redAccent)),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Vazgeç')),
+              FilledButton(
+                onPressed: () {
+                  if (girilen <= 0) {
+                    setS(() => hata = 'Tutarı yazın.');
+                    return;
+                  }
+                  Navigator.pop(ctx, {
+                    'alinan': girilen,
+                    'yontem': yontem,
+                    'ek': fazla > 0 ? fazla : 0,
+                  });
+                },
+                child: const Text('Kaydet'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (sonuc == null) return;
+    final int alinan = sonuc['alinan'] as int;
+    final int ek = sonuc['ek'] as int;
+    try {
+      if (ek > 0) {
+        await _db
+            .from('service_orders')
+            .update({'labor': alan(o, 'labor') + ek / 100}).eq('id', o['id']);
+      }
+      await _db.from('cash_transactions').insert({
+        'tx_date': bugunTarih(),
+        'direction': 'giris',
+        'kind': 'musteri_odeme',
+        'section': 'teknik',
+        'amount': alinan / 100,
+        'method': sonuc['yontem'],
+        'description': '',
+        'customer_id': o['customer_id'],
+        'service_order_id': o['id'],
+      });
+    } catch (e) {
+      if (ek > 0) {
+        try {
+          await _db
+              .from('service_orders')
+              .update({'labor': alan(o, 'labor')}).eq('id', o['id']);
+        } catch (_) {}
+      }
+      if (!mounted) return;
+      _mesaj(context, 'Kaydedilemedi: ${hataMetni(e)}');
+      return;
+    }
+    await _yukle();
+    if (!mounted) return;
+    final kalanSonra = kalanKurus + ek - alinan;
+    if (kalanSonra <= 0 && !_kapaliDurumlar.contains(_durum)) {
+      final evet = await _onay(
+          context,
+          'Servis teslim edilsin mi?',
+          'Ödemenin tamamı alındı. Durumu "Teslim edildi" yapayım mı?',
+          'Teslim et');
+      if (evet) await _durumDegistir('Teslim edildi');
+    }
+  }
+
   Future<void> _odemeIptal(Map<String, dynamic> p) async {
     final iade = p['kind'] == 'musteri_iade';
     final ok = await _onay(
@@ -1123,6 +1271,73 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
     } catch (e) {
       if (!mounted) return;
       _mesaj(context, 'Eklenemedi: ${hataMetni(e)}');
+    }
+  }
+
+  Future<void> _kalemFiyat(Map<String, dynamic> k) async {
+    final c = TextEditingController(text: sayiYaz(k['unit_price']));
+    String? hata;
+    final yeni = await showDialog<int>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('Müşteriye satış fiyatı'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${k['description']} • ${tam(k, 'qty')} adet'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: c,
+                autofocus: true,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                    labelText: 'Birim satış fiyatı',
+                    suffixText: '₺',
+                    border: OutlineInputBorder()),
+              ),
+              if (hata != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(hata!,
+                      style: const TextStyle(color: Colors.redAccent)),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Vazgeç')),
+            FilledButton(
+              onPressed: () {
+                final kurus = _k(c.text);
+                final fark =
+                    (kurus - (alan(k, 'unit_price') * 100).round()) *
+                        tam(k, 'qty') /
+                        100;
+                if (_sv('total') + fark < _sv('paid') - 0.004) {
+                  setS(() => hata = 'Toplam, ödenen tutarın altına düşemez.');
+                  return;
+                }
+                Navigator.pop(ctx, kurus);
+              },
+              child: const Text('Kaydet'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (yeni == null) return;
+    try {
+      await _db
+          .from('service_items')
+          .update({'unit_price': yeni / 100}).eq('id', k['id']);
+      _yukle();
+    } catch (e) {
+      if (!mounted) return;
+      _mesaj(context, 'Kaydedilemedi: ${hataMetni(e)}');
     }
   }
 
@@ -1365,6 +1580,11 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
                         icon: const Icon(Icons.delete_outline),
                         tooltip: 'Kaldır',
                         onPressed: () => _kalemKaldir(k),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        tooltip: 'Satış fiyatını değiştir',
+                        onPressed: () => _kalemFiyat(k),
                       ),
                     ],
                   ),

@@ -2,24 +2,27 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'alislar.dart';
+import 'arama.dart';
+import 'ayarlar.dart';
 import 'gun_raporu.dart';
+import 'hurda.dart';
+import 'iadeler.dart';
 import 'kasa.dart';
+import 'kasa_ozeti.dart';
+import 'kur.dart';
 import 'musteriler.dart';
 import 'ozet.dart';
 import 'raporlar.dart';
 import 'servisler.dart';
 import 'tedarikciler.dart';
 import 'urunler.dart';
-import 'kur.dart';
 import 'yedek.dart';
-import 'arama.dart';
-import 'ayarlar.dart';
-import 'hurda.dart';
-import 'iadeler.dart';
 
 /// Uygulamanın adı. İleride değiştirmek için sadece bu satırı değiştirin.
 const uygulamaAdi = 'Zarova Teknik Servis';
-const uygulamaSurumu = '1.1.0';
+
+/// Her yeni sürümde bu numarayı artırın.
+const uygulamaSurumu = '1.2.0';
 
 class _Yildiz {
   final double x, y, boyut, faz;
@@ -166,7 +169,6 @@ const _turuncu = Color(0xFFFBBF24);
 const _mor = Color(0xFFA78BFA);
 
 const _ogeler = <_Oge>[
-   _Oge(Icons.search, 'Genel Arama', _turuncu, AramaSayfasi()),
   _Oge(Icons.build, 'Servis Kayıtları', _mavi, ServislerSayfasi()),
   _Oge(Icons.people, 'Müşteriler', _mavi, MusterilerSayfasi()),
   _Oge(Icons.inventory_2, 'Stok ve Parçalar', _mavi,
@@ -176,7 +178,8 @@ const _ogeler = <_Oge>[
   _Oge(Icons.account_balance_wallet, 'Kasa', _yesil, KasaSayfasi()),
   _Oge(Icons.event_note, 'Günlük Rapor', _turuncu, GunRaporuSayfasi()),
   _Oge(Icons.bar_chart, 'Raporlar', _turuncu, RaporlarSayfasi()),
-   _Oge(Icons.recycling, 'Hurda Cihazlar', _mavi, HurdaSayfasi()),
+  _Oge(Icons.search, 'Genel Arama', _turuncu, AramaSayfasi()),
+  _Oge(Icons.recycling, 'Hurda Cihazlar', _mavi, HurdaSayfasi()),
   _Oge(Icons.assignment_return, 'İadeler', _mavi, IadelerSayfasi()),
   _Oge(Icons.cloud_download, 'Yedekleme', _mor, YedekSayfasi()),
   _Oge(Icons.settings, 'Ayarlar', _mor, AyarlarSayfasi()),
@@ -207,15 +210,15 @@ class _AnaMenuState extends State<AnaMenu> {
       child: YildizArkaplan(
         child: Scaffold(
           backgroundColor: Colors.transparent,
-          bottomNavigationBar: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Text('Sürüm $uygulamaSurumu',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 12, color: Colors.white54)),
+          bottomNavigationBar: const SafeArea(
+            child: Padding(
+              padding: EdgeInsets.all(8),
+              child: Text('Sürüm $uygulamaSurumu',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Colors.white54)),
+            ),
           ),
-        ),
-        appBar: AppBar(
+          appBar: AppBar(
             backgroundColor: Colors.transparent,
             elevation: 0,
             scrolledUnderElevation: 0,
@@ -236,23 +239,36 @@ class _AnaMenuState extends State<AnaMenu> {
           ),
           body: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
+              constraints: const BoxConstraints(maxWidth: 940),
               child: ListView(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(16),
                 children: [
-                const KurRozeti(),
-                  OzetPaneli(key: ValueKey(_yenile)),
-                  ..._ogeler.map(
-                    (o) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _CamDugme(
-                        ikon: o.ikon,
-                        yazi: o.yazi,
-                        renk: o.renk,
-                        onTap: () => _git(o.sayfa),
-                      ),
-                    ),
+                  KasaOzeti(key: ValueKey('k$_yenile')),
+                  const KurRozeti(),
+                  LayoutBuilder(
+                    builder: (context, kisit) {
+                      final w = kisit.maxWidth;
+                      final kolon = w >= 760 ? 4 : (w >= 520 ? 3 : 2);
+                      return GridView.count(
+                        crossAxisCount: kolon,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: 1.15,
+                        children: _ogeler
+                            .map((o) => _Karo(
+                                  ikon: o.ikon,
+                                  yazi: o.yazi,
+                                  renk: o.renk,
+                                  onTap: () => _git(o.sayfa),
+                                ))
+                            .toList(),
+                      );
+                    },
                   ),
+                  const SizedBox(height: 16),
+                  OzetPaneli(key: ValueKey('o$_yenile')),
                 ],
               ),
             ),
@@ -263,12 +279,12 @@ class _AnaMenuState extends State<AnaMenu> {
   }
 }
 
-class _CamDugme extends StatelessWidget {
+class _Karo extends StatelessWidget {
   final IconData ikon;
   final String yazi;
   final Color renk;
   final VoidCallback onTap;
-  const _CamDugme({
+  const _Karo({
     required this.ikon,
     required this.yazi,
     required this.renk,
@@ -283,33 +299,34 @@ class _CamDugme extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         onTap: onTap,
         child: Ink(
-          height: 72,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
             color: Colors.white.withValues(alpha: 0.07),
             border: Border.all(color: renk.withValues(alpha: 0.45)),
             boxShadow: [
-              BoxShadow(color: renk.withValues(alpha: 0.18), blurRadius: 18),
+              BoxShadow(color: renk.withValues(alpha: 0.18), blurRadius: 16),
             ],
           ),
-          child: Row(
-            children: [
-              const SizedBox(width: 18),
-              Icon(ikon, color: renk, size: 28),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(ikon, color: renk, size: 34),
+                const SizedBox(height: 8),
+                Text(
                   yazi,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 18,
+                    fontSize: 14.5,
                     color: Colors.white,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-              ),
-              const Icon(Icons.chevron_right, color: Colors.white54),
-              const SizedBox(width: 10),
-            ],
+              ],
+            ),
           ),
         ),
       ),

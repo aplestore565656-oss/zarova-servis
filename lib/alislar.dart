@@ -14,7 +14,7 @@ const bolumAdlari = <String, String>{
 const odemeYontemleri = <String, String>{
   'nakit': 'Nakit',
   'kart': 'Kart',
-  'havale': 'Havale',
+  'havale': 'Havale/EFT',
 };
 
 ThemeData _koyu() => ThemeData(

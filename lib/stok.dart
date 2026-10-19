@@ -293,7 +293,8 @@ class _ParcaFormuState extends State<ParcaFormu> {
       'min_stock': tamSayi(_minStok.text),
       'location': _raf.text.trim(),
       'serial_no': _seri.text.trim(),
-      'note': _not.text.trim(),
+'note': _not.text.trim(),
+      'category': widget.kategori,
     };
     try {
       if (widget.parca == null) {
