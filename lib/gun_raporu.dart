@@ -98,30 +98,60 @@ class _GunRaporuSayfasiState extends State<GunRaporuSayfasi> {
 
   Widget _satir(Map<String, dynamic> x) {
     final kaynak = '${x['source']}';
-    final yon = x['direction'];
+    final baslik = '${x['title']}';
+    final tutar = alan(x, 'amount');
+    final kar = alan(x, 'profit');
     IconData ikon;
     Color renk;
-    String isaret = '';
+    String baslikYazi = baslik;
+    String sag = '';
+    Color? sagRenk;
+    String ek = '';
     if (kaynak == 'para') {
-      final giris = yon == 'giris';
+      final giris = x['direction'] == 'giris';
       ikon = giris ? Icons.arrow_downward : Icons.arrow_upward;
       renk = giris ? Colors.greenAccent : Colors.redAccent;
-      isaret = giris ? '+' : '-';
+      sag = '${giris ? '+' : '-'}${para(tutar)}';
+      sagRenk = renk;
+    } else if (kaynak == 'servis' && baslik == 'Servis kabul') {
+      ikon = Icons.login;
+      renk = Colors.lightBlueAccent;
+      baslikYazi = 'Servis kabul (yeni iş)';
+      ek = 'iş tutarı ${para(tutar)} (para hareketi değil)';
+    } else if (kaynak == 'servis') {
+      ikon = Icons.check_circle;
+      renk = Colors.lightBlueAccent;
+      baslikYazi = 'Servis teslim (iş bitti)';
+      sag = 'Kâr ${para(kar)}';
+      sagRenk = kar >= 0 ? Colors.greenAccent : Colors.redAccent;
+      ek = 'iş tutarı ${para(tutar)}';
+    } else if (kaynak == 'hurda') {
+      ikon = Icons.recycling;
+      renk = Colors.purpleAccent;
+      sag = 'Kâr ${para(kar)}';
+      sagRenk = kar >= 0 ? Colors.greenAccent : Colors.redAccent;
+      ek = 'satış ${para(tutar)}';
     } else if (kaynak == 'alis') {
       ikon = Icons.add_shopping_cart;
       renk = Colors.orangeAccent;
-    } else if (kaynak == 'servis') {
-      ikon = Icons.build;
-      renk = Colors.lightBlueAccent;
+      baslikYazi = 'Parça alışı (fatura)';
+      sag = para(tutar);
+      ek = 'borç/ödeme tedarikçi sayfasında';
     } else {
       ikon = Icons.point_of_sale;
       renk = Colors.pinkAccent;
+      sag = para(tutar);
     }
     final d = DateTime.tryParse('${x['sort_at']}')?.toLocal();
-    final saat = d == null
+    final saat = (d == null || kaynak == 'hurda')
         ? ''
         : '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
     final detay = '${x['detail'] ?? ''}'.trim();
+    final alt = [
+      if (saat.isNotEmpty) saat,
+      if (detay.isNotEmpty) detay,
+      if (ek.isNotEmpty) ek,
+    ].join(' • ');
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: ListTile(
@@ -129,26 +159,28 @@ class _GunRaporuSayfasiState extends State<GunRaporuSayfasi> {
           backgroundColor: renk.withValues(alpha: 0.18),
           child: Icon(ikon, color: renk),
         ),
-        title: Text('${x['title']}', style: const TextStyle(fontSize: 16)),
-        subtitle: Text('$saat${detay.isEmpty ? '' : ' • $detay'}'),
-        trailing: Text('$isaret${para(alan(x, 'amount'))}',
-            style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: kaynak == 'para' ? renk : null)),
+        title: Text(baslikYazi, style: const TextStyle(fontSize: 16)),
+        subtitle: Text(alt),
+        trailing: sag.isEmpty
+            ? null
+            : Text(sag,
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 15, color: sagRenk)),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    bool para0(Map<String, dynamic> x) => x['source'] == 'para';
-    final giris = _toplam((x) => para0(x) && x['direction'] == 'giris', 'amount');
-    final cikis = _toplam((x) => para0(x) && x['direction'] == 'cikis', 'amount');
+    bool paraSatiri(Map<String, dynamic> x) => x['source'] == 'para';
+    final giris =
+        _toplam((x) => paraSatiri(x) && x['direction'] == 'giris', 'amount');
+    final cikis =
+        _toplam((x) => paraSatiri(x) && x['direction'] == 'cikis', 'amount');
     final kar = _toplam((x) => true, 'profit');
     final kabul = _say((x) => x['title'] == 'Servis kabul');
     final teslim = _say((x) => x['title'] == 'Servis teslim');
-    final satis = _say((x) => x['source'] == 'satis');
+    final hurda = _say((x) => x['source'] == 'hurda');
     return Theme(
       data: ThemeData(
           brightness: Brightness.dark,
@@ -237,14 +269,17 @@ class _GunRaporuSayfasiState extends State<GunRaporuSayfasi> {
                             renk: Colors.greenAccent),
                         _kutu('Kasadan çıkan', para(cikis),
                             renk: Colors.redAccent),
-                        _kutu('Net', para(giris - cikis),
+                        _kutu('Net kasa', para(giris - cikis),
                             renk: giris - cikis >= 0
                                 ? Colors.greenAccent
                                 : Colors.redAccent),
-                        _kutu('Kâr (brüt)', para(kar)),
-                        _kutu('Servis kabul', '$kabul'),
-                        _kutu('Servis teslim', '$teslim'),
-                        _kutu('Satış sayısı', '$satis'),
+                        _kutu('Kâr (servis + hurda)', para(kar),
+                            renk: kar >= 0
+                                ? Colors.greenAccent
+                                : Colors.redAccent),
+                        _kutu('Servis kabul (yeni iş)', '$kabul'),
+                        _kutu('Servis teslim (biten iş)', '$teslim'),
+                        _kutu('Hurda satışı', '$hurda'),
                       ],
                     ),
                     const Padding(
@@ -264,7 +299,9 @@ class _GunRaporuSayfasiState extends State<GunRaporuSayfasi> {
                     const Padding(
                       padding: EdgeInsets.all(8),
                       child: Text(
-                        'Alış ve servis kayıtlarının tutarı bilgi içindir, kasa toplamına sadece gerçek para hareketleri girer. Kâr, teslim edilen servis ve satışlardan hesaplanır.',
+                        'Yeşil ve kırmızı satırlar gerçek para hareketidir, kasaya yalnızca bunlar girer. '
+                        '"Servis kabul" ile "Servis teslim" aynı işin iki aşamasıdır, tutarları bilgi içindir, '
+                        'toplanmaz. Kâr, teslim edilen servislerden ve satılan hurdalardan hesaplanır.',
                         style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ),

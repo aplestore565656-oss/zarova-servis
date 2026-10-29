@@ -178,7 +178,7 @@ const _ogeler = <_Oge>[
   _Oge(Icons.account_balance_wallet, 'Kasa', _yesil, KasaSayfasi()),
   _Oge(Icons.event_note, 'Günlük Rapor', _turuncu, GunRaporuSayfasi()),
   _Oge(Icons.bar_chart, 'Raporlar', _turuncu, RaporlarSayfasi()),
-  _Oge(Icons.search, 'Genel Arama', _turuncu, AramaSayfasi()),
+  // Genel arama şeridi menünün üstüne taşındı
   _Oge(Icons.recycling, 'Hurda Cihazlar', _mavi, HurdaSayfasi()),
   _Oge(Icons.assignment_return, 'İadeler', _mavi, IadelerSayfasi()),
   _Oge(Icons.cloud_download, 'Yedekleme', _mor, YedekSayfasi()),
@@ -193,7 +193,13 @@ class AnaMenu extends StatefulWidget {
 }
 
 class _AnaMenuState extends State<AnaMenu> {
-  int _yenile = 0;
+int _yenile = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    otomatikYedekKontrol();
+  }
 
   Future<void> _git(Widget sayfa) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => sayfa));
@@ -245,6 +251,7 @@ class _AnaMenuState extends State<AnaMenu> {
                 children: [
                   KasaOzeti(key: ValueKey('k$_yenile')),
                   const KurRozeti(),
+                  _AramaSeridi(onTap: () => _git(const AramaSayfasi())),
                   LayoutBuilder(
                     builder: (context, kisit) {
                       final w = kisit.maxWidth;
@@ -271,6 +278,52 @@ class _AnaMenuState extends State<AnaMenu> {
                   OzetPaneli(key: ValueKey('o$_yenile')),
                 ],
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AramaSeridi extends StatelessWidget {
+  final VoidCallback onTap;
+  const _AramaSeridi({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Ink(
+            height: 56,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: Colors.white.withValues(alpha: 0.09),
+              border: Border.all(color: _turuncu.withValues(alpha: 0.55)),
+              boxShadow: [
+                BoxShadow(color: _turuncu.withValues(alpha: 0.18), blurRadius: 14),
+              ],
+            ),
+            child: const Row(
+              children: [
+                SizedBox(width: 16),
+                Icon(Icons.search, color: _turuncu),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Genel arama: müşteri, telefon, IMEI, iş emri, parça...',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 15, color: Colors.white70),
+                  ),
+                ),
+                Icon(Icons.chevron_right, color: Colors.white54),
+                SizedBox(width: 10),
+              ],
             ),
           ),
         ),

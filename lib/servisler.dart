@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'alislar.dart' show hataMetni, odemeYontemleri, bugunTarih;
 import 'ana_menu.dart' show YildizArkaplan;
-import 'musteriler.dart' show musteriFormuAc;
-import 'yardimci.dart';
-import 'parca_ekle.dart';
 import 'ayarlar.dart' show UstaSecici;
 import 'foto.dart' show FotoPaneli;
+import 'musteriler.dart' show musteriFormuAc;
+import 'parca_ekle.dart';
 import 'servis_formu.dart' show servisFormuYazdir;
+import 'yardimci.dart';
 
 final _db = Supabase.instance.client;
 
@@ -24,6 +25,15 @@ const servisDurumlari = [
   'İade edildi',
 ];
 const _kapaliDurumlar = ['Teslim edildi', 'İptal edildi', 'İade edildi'];
+const _acikDurumlar = [
+  'Kayıt alındı',
+  'Arıza tespiti yapılıyor',
+  'Parça bekleniyor',
+  'Tamirde',
+  'Test ediliyor',
+  'Hazır',
+  'Müşteriye haber verildi',
+];
 
 Color durumRengi(String d) {
   switch (d) {
@@ -85,167 +95,6 @@ void _mesaj(BuildContext c, String m) {
   ScaffoldMessenger.of(c).showSnackBar(SnackBar(content: Text(m)));
 }
 
-/// Parça / işlem kalemi penceresi. Stoktan parça veya serbest yazılan kalem verir.
-Future<Map<String, dynamic>?> kalemDialoguEski(BuildContext context) {
-  final ad = TextEditingController();
-  final adet = TextEditingController(text: '1');
-  final fiyat = TextEditingController();
-  final maliyet = TextEditingController();
-  String? urunId;
-  String? urunAd;
-  int? stok;
-  String? hata;
-
-  return showDialog<Map<String, dynamic>>(
-    context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setS) {
-        Future<void> sec() async {
-          try {
-            final veri = await _db
-                .from('products')
-                .select('id, name, brand, model, sell_price, stock')
-                .eq('section', 'teknik')
-                .isFilter('deleted_at', null)
-                .order('name');
-            if (!ctx.mounted) return;
-            final liste = List<Map<String, dynamic>>.from(veri)
-                .map((p) => {
-                      ...p,
-                      'etiket':
-                          '${p['name']} ${p['brand']} ${p['model']}'.trim(),
-                      'stokYazi':
-                          'Stok: ${tam(p, 'stock')} adet • Satış ${para(alan(p, 'sell_price'))}',
-                    })
-                .toList();
-            final p = await secimPenceresi(ctx,
-                baslik: 'Stoktan parça seç',
-                liste: liste,
-                ana: 'etiket',
-                alt: 'stokYazi');
-            if (p != null) {
-              setS(() {
-                urunId = p['id'];
-                urunAd = p['etiket'];
-                stok = tam(p, 'stock');
-                fiyat.text = sayiYaz(alan(p, 'sell_price'));
-              });
-            }
-          } catch (e) {
-            setS(() => hata = 'Parçalar alınamadı: ${hataMetni(e)}');
-          }
-        }
-
-        final q = tamSayi(adet.text);
-        return AlertDialog(
-          title: const Text('Parça / işlem ekle'),
-          content: SizedBox(
-            width: 420,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.memory),
-                      title: Text(urunAd ?? 'Stoktan parça seç'),
-                      subtitle: stok == null ? null : Text('Stokta $stok adet'),
-                      trailing: urunId == null
-                          ? const Icon(Icons.search)
-                          : IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () => setS(() {
-                                urunId = null;
-                                urunAd = null;
-                                stok = null;
-                              }),
-                            ),
-                      onTap: sec,
-                    ),
-                  ),
-                  if (urunId == null) ...[
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: ad,
-                      decoration: const InputDecoration(
-                          labelText: 'veya stok dışı parça / işlem adı',
-                          border: OutlineInputBorder()),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: maliyet,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                          labelText: 'Birim maliyetiniz (bilmiyorsanız boş)',
-                          suffixText: '₺',
-                          border: OutlineInputBorder()),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: adet,
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) => setS(() {}),
-                    decoration: const InputDecoration(
-                        labelText: 'Adet', border: OutlineInputBorder()),
-                  ),
-                  if (stok != null && q > stok!)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                          'Dikkat: Stokta $stok adet var, stok eksiye düşer.',
-                          style: TextStyle(color: Colors.orange.shade300)),
-                    ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: fiyat,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                        labelText: 'Müşteriye birim satış fiyatı',
-                        suffixText: '₺',
-                        border: OutlineInputBorder()),
-                  ),
-                  if (hata != null) ...[
-                    const SizedBox(height: 10),
-                    Text(hata!, style: const TextStyle(color: Colors.redAccent)),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Vazgeç')),
-            FilledButton(
-              onPressed: () {
-                if (urunId == null && ad.text.trim().isEmpty) {
-                  setS(() => hata = 'Stoktan parça seçin veya bir ad yazın.');
-                  return;
-                }
-                if (tamSayi(adet.text) <= 0) {
-                  setS(() => hata = 'Adet 1 veya daha fazla olmalı.');
-                  return;
-                }
-                Navigator.pop(ctx, {
-                  'product_id': urunId,
-                  'description': urunId != null ? urunAd : ad.text.trim(),
-                  'qty': tamSayi(adet.text),
-                  'unit_price': _k(fiyat.text) / 100,
-                  'unit_cost': urunId != null ? null : _k(maliyet.text) / 100,
-                });
-              },
-              child: const Text('Ekle'),
-            ),
-          ],
-        );
-      },
-    ),
-  );
-}
-
 // ======================= LİSTE =======================
 class ServislerSayfasi extends StatefulWidget {
   const ServislerSayfasi({super.key});
@@ -257,6 +106,7 @@ class ServislerSayfasi extends StatefulWidget {
 class _ServislerSayfasiState extends State<ServislerSayfasi> {
   List<Map<String, dynamic>> _liste = [];
   Map<dynamic, Map<String, dynamic>> _ozet = {};
+  double _tedBorc = 0;
   bool _yukleniyor = true;
   String? _hata;
   String _arama = '';
@@ -281,6 +131,14 @@ class _ServislerSayfasiState extends State<ServislerSayfasi> {
           .order('received_at', ascending: false)
           .limit(500);
       final s = await _db.from('service_summary').select();
+      double borc = 0;
+      try {
+        final t = await _db.from('supplier_accounts').select('balance');
+        for (final x in List<Map<String, dynamic>>.from(t)) {
+          final b = alan(x, 'balance');
+          if (b > 0) borc += b;
+        }
+      } catch (_) {}
       if (!mounted) return;
       setState(() {
         _liste = List<Map<String, dynamic>>.from(v);
@@ -288,6 +146,7 @@ class _ServislerSayfasiState extends State<ServislerSayfasi> {
           for (final x in List<Map<String, dynamic>>.from(s))
             x['service_order_id']: x
         };
+        _tedBorc = borc;
         _yukleniyor = false;
       });
     } catch (e) {
@@ -297,6 +156,41 @@ class _ServislerSayfasiState extends State<ServislerSayfasi> {
         _yukleniyor = false;
       });
     }
+  }
+
+  bool _kapali(Map<String, dynamic> s) =>
+      _kapaliDurumlar.contains('${s['status']}');
+
+  int _say(String f) {
+    if (f == 'tumu') return _liste.length;
+    if (f == 'acik') return _liste.where((s) => !_kapali(s)).length;
+    return _liste.where((s) => s['status'] == f).length;
+  }
+
+  double _kalan(Map<String, dynamic> s) {
+    final o = _ozet[s['id']];
+    return o == null ? 0.0 : alan(o, 'remaining');
+  }
+
+  double get _alinacak => _liste
+      .where((s) => s['status'] != 'İptal edildi' && s['status'] != 'İade edildi')
+      .fold<double>(0.0, (t, s) => t + (_kalan(s) > 0 ? _kalan(s) : 0));
+
+  double get _hazirAlinacak => _liste
+      .where((s) =>
+          s['status'] == 'Hazır' || s['status'] == 'Müşteriye haber verildi')
+      .fold<double>(0.0, (t, s) => t + (_kalan(s) > 0 ? _kalan(s) : 0));
+
+  double get _buAyKar {
+    final n = DateTime.now();
+    return _liste.where((s) {
+      if (s['status'] != 'Teslim edildi') return false;
+      final d = DateTime.tryParse('${s['delivered_at'] ?? ''}')?.toLocal();
+      return d != null && d.year == n.year && d.month == n.month;
+    }).fold<double>(0.0, (t, s) {
+      final o = _ozet[s['id']];
+      return t + (o == null ? 0.0 : alan(o, 'profit'));
+    });
   }
 
   List<Map<String, dynamic>> get _gorunen {
@@ -327,6 +221,160 @@ class _ServislerSayfasiState extends State<ServislerSayfasi> {
     _yukle();
   }
 
+  Future<void> _hizliDurum(Map<String, dynamic> s, String yeni) async {
+    if (yeni == '${s['status']}') return;
+    if (_kapaliDurumlar.contains(yeni)) {
+      _mesaj(context,
+          'Teslim, iptal ve iade için servis kaydını açıp durumu orada değiştirin.');
+      await _detay(s);
+      return;
+    }
+    try {
+      await _db
+          .from('service_orders')
+          .update({'status': yeni}).eq('id', s['id']);
+      await _yukle();
+    } catch (e) {
+      if (!mounted) return;
+      _mesaj(context, 'Durum değiştirilemedi: ${hataMetni(e)}');
+    }
+  }
+
+  Widget _ozetKutu(String baslik, double deger, Color renk) {
+    return Container(
+      width: 152,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: renk.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(baslik,
+              style: const TextStyle(fontSize: 11.5, color: Colors.white70)),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(para(deger),
+                style: TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.bold, color: renk)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(String deger, String etiket) => ChoiceChip(
+        label: Text('$etiket (${_say(deger)})'),
+        selected: _filtre == deger,
+        onSelected: (_) => setState(() => _filtre = deger),
+      );
+
+  Widget _baslik() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          child: TextField(
+            key: const ValueKey('servis-ara'),
+            onChanged: (v) => setState(() => _arama = v),
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: 'Müşteri, telefon, IMEI, model veya iş emri ara',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _ozetKutu('Müşteriden alınacak', _alinacak, Colors.orangeAccent),
+              _ozetKutu('Teslime hazır, alınacak', _hazirAlinacak,
+                  Colors.greenAccent),
+              _ozetKutu('Bu ay kâr (teslim edilen)', _buAyKar,
+                  Colors.cyanAccent),
+              _ozetKutu('Tedarikçiye borç', _tedBorc, Colors.redAccent),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                _chip('acik', 'Açık işler'),
+                _chip('tumu', 'Tümü'),
+                ...servisDurumlari.map((d) => _chip(d, d)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _kart(Map<String, dynamic> s) {
+    final m = s['customers'] as Map<String, dynamic>?;
+    final o = _ozet[s['id']];
+    final kalan = o == null ? 0.0 : alan(o, 'remaining');
+    final toplam = o == null ? 0.0 : alan(o, 'total');
+    final durum = '${s['status']}';
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: ListTile(
+        onTap: () => _detay(s),
+        isThreeLine: true,
+        title: Text('${s['order_no']} • ${s['brand']} ${s['model']}'.trim(),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        subtitle: Text(
+            '${m?['full_name'] ?? ''} • ${tarih('${s['received_at']}')}\n${s['problem']}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis),
+        trailing: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            PopupMenuButton<String>(
+              tooltip: 'Durumu değiştir',
+              onSelected: (v) => _hizliDurum(s, v),
+              itemBuilder: (_) => servisDurumlari
+                  .map((d) => PopupMenuItem<String>(
+                        value: d,
+                        child: Text(d, style: TextStyle(color: durumRengi(d))),
+                      ))
+                  .toList(),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(durum,
+                      style: TextStyle(
+                          color: durumRengi(durum),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12)),
+                  Icon(Icons.arrow_drop_down,
+                      size: 18, color: durumRengi(durum)),
+                ],
+              ),
+            ),
+            if (kalan > 0.004)
+              Text('Kalan ${para(kalan)}',
+                  style: const TextStyle(color: Colors.redAccent))
+            else if (toplam > 0)
+              const Text('Ödendi', style: TextStyle(color: Colors.greenAccent)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _icerik() {
     if (_yukleniyor) return const Center(child: CircularProgressIndicator());
     if (_hata != null) {
@@ -347,64 +395,23 @@ class _ServislerSayfasiState extends State<ServislerSayfasi> {
       );
     }
     final liste = _gorunen;
-    if (liste.isEmpty) {
-      return const Center(
-          child: Text('Servis kaydı bulunamadı.', style: TextStyle(fontSize: 18)));
-    }
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 90),
-      itemCount: liste.length,
+      itemCount: liste.isEmpty ? 2 : liste.length + 1,
       itemBuilder: (context, i) {
-        final s = liste[i];
-        final m = s['customers'] as Map<String, dynamic>?;
-        final o = _ozet[s['id']];
-        final kalan = o == null ? 0.0 : alan(o, 'remaining');
-        final toplam = o == null ? 0.0 : alan(o, 'total');
-        final durum = '${s['status']}';
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: ListTile(
-            onTap: () => _detay(s),
-            isThreeLine: true,
-            title: Text(
-                '${s['order_no']} • ${s['brand']} ${s['model']}'.trim(),
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            subtitle: Text(
-                '${m?['full_name'] ?? ''} • ${tarih('${s['received_at']}')}\n${s['problem']}',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis),
-            trailing: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(durum,
-                    style: TextStyle(
-                        color: durumRengi(durum),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12)),
-                const SizedBox(height: 4),
-                if (kalan > 0.004)
-                  Text('Kalan ${para(kalan)}',
-                      style: const TextStyle(color: Colors.redAccent))
-                else if (toplam > 0)
-                  const Text('Ödendi',
-                      style: TextStyle(color: Colors.greenAccent)),
-              ],
-            ),
-          ),
-        );
+        if (i == 0) return _baslik();
+        if (liste.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(
+                child: Text('Bu sekmede servis kaydı yok.',
+                    style: TextStyle(fontSize: 17))),
+          );
+        }
+        return _kart(liste[i - 1]);
       },
     );
   }
-
-  Widget _chip(String deger, String etiket) => Padding(
-        padding: const EdgeInsets.only(right: 6),
-        child: ChoiceChip(
-          label: Text(etiket),
-          selected: _filtre == deger,
-          onSelected: (_) => setState(() => _filtre = deger),
-        ),
-      );
 
   @override
   Widget build(BuildContext context) {
@@ -431,34 +438,7 @@ class _ServislerSayfasiState extends State<ServislerSayfasi> {
           body: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 800),
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
-                    child: TextField(
-                      onChanged: (v) => setState(() => _arama = v),
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.search),
-                        hintText: 'Müşteri, telefon, IMEI, model veya iş emri ara',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Row(
-                      children: [
-                        _chip('acik', 'Açık işler'),
-                        _chip('tumu', 'Tümü'),
-                        ...servisDurumlari.map((d) => _chip(d, d)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Expanded(child: _icerik()),
-                ],
-              ),
+              child: _icerik(),
             ),
           ),
         ),
@@ -489,8 +469,8 @@ class _ServisFormuState extends State<ServisFormu> {
   late final _yapilan = TextEditingController(text: _t('work_done'));
   late final _teslimNotu = TextEditingController(text: _t('device_notes'));
   late final _usta = TextEditingController(text: _t('technician'));
-  late final _garanti = TextEditingController(
-      text: sayiYaz(widget.siparis?['warranty_days']));
+  late final _garanti =
+      TextEditingController(text: sayiYaz(widget.siparis?['warranty_days']));
   late final _not = TextEditingController(text: _t('note'));
   final _iscilik = TextEditingController();
   final _odenen = TextEditingController();
@@ -499,6 +479,7 @@ class _ServisFormuState extends State<ServisFormu> {
   late String? _musteriAd =
       (widget.siparis?['customers'] as Map<String, dynamic>?)?['full_name'];
   final List<Map<String, dynamic>> _kalemler = [];
+  String _durumSec = 'Kayıt alındı';
   String _yontem = 'nakit';
   bool _kaydediliyor = false;
   String? _hata;
@@ -575,16 +556,11 @@ class _ServisFormuState extends State<ServisFormu> {
     });
     try {
       if (_yeni) {
-        final toplam = _parcaKurus + _k(_iscilik.text);
+        final parca = _parcaKurus;
+        var iscilik = _k(_iscilik.text);
         final odenen = _k(_odenen.text);
-        if (odenen > toplam) {
-          setState(() {
-            _hata = 'Ödenen tutar toplamdan fazla olamaz.';
-            _kaydediliyor = false;
-          });
-          return;
-        }
-        await _db.rpc('create_service_order', params: {
+        if (odenen > parca + iscilik) iscilik = odenen - parca;
+        final id = await _db.rpc('create_service_order', params: {
           'p_customer': _musteriId,
           'p_brand': _marka.text.trim(),
           'p_model': _model.text.trim(),
@@ -595,7 +571,7 @@ class _ServisFormuState extends State<ServisFormu> {
           'p_device_notes': _teslimNotu.text.trim(),
           'p_technician': _usta.text.trim(),
           'p_warranty': garanti,
-          'p_labor': _k(_iscilik.text) / 100,
+          'p_labor': iscilik / 100,
           'p_note': _not.text.trim(),
           'p_items': _kalemler
               .map((k) => {
@@ -609,6 +585,13 @@ class _ServisFormuState extends State<ServisFormu> {
           'p_paid': odenen / 100,
           'p_method': _yontem,
         });
+        if (_durumSec != 'Kayıt alındı') {
+          try {
+            await _db
+                .from('service_orders')
+                .update({'status': _durumSec}).eq('id', '$id');
+          } catch (_) {}
+        }
       } else {
         await _db.from('service_orders').update({
           'brand': _marka.text.trim(),
@@ -657,8 +640,12 @@ class _ServisFormuState extends State<ServisFormu> {
 
   @override
   Widget build(BuildContext context) {
-    final toplam = (_parcaKurus + _k(_iscilik.text)) / 100;
-    final kalan = toplam - _k(_odenen.text) / 100;
+    final parca = _parcaKurus;
+    final iscilikYazi = _k(_iscilik.text);
+    final odenenYazi = _k(_odenen.text);
+    final fazla = odenenYazi > parca + iscilikYazi;
+    final toplam = (fazla ? odenenYazi : parca + iscilikYazi) / 100;
+    final kalan = toplam - odenenYazi / 100;
     return Theme(
       data: _koyu(),
       child: YildizArkaplan(
@@ -696,9 +683,41 @@ class _ServisFormuState extends State<ServisFormu> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  if (_yeni) ...[
+                    const Text('Başlangıç durumu',
+                        style: TextStyle(fontSize: 16)),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _acikDurumlar
+                          .map((d) => ChoiceChip(
+                                label: Text(d),
+                                selected: _durumSec == d,
+                                onSelected: (_) =>
+                                    setState(() => _durumSec = d),
+                              ))
+                          .toList(),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
                   _girdi(_marka, 'Cihaz markası'),
                   _girdi(_model, 'Model'),
-                  _girdi(_imei, 'IMEI'),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: TextField(
+                      controller: _imei,
+                      keyboardType: TextInputType.number,
+                      maxLength: 15,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(15),
+                      ],
+                      decoration: const InputDecoration(
+                          labelText: 'IMEI (15 hane)',
+                          border: OutlineInputBorder()),
+                    ),
+                  ),
                   _girdi(_durumu, 'Cihazın mevcut durumu (çizik, kırık vb.)',
                       satir: 2),
                   _girdi(_ariza, 'Müşterinin bildirdiği arıza', satir: 2),
@@ -716,6 +735,13 @@ class _ServisFormuState extends State<ServisFormu> {
                       child: Text('Parçalar ve işçilik',
                           style: TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold)),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        'Parçayı şimdi eklemeyebilirsiniz. Arıza tespitinden sonra servis detayından da ekleyebilirsiniz.',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
                     ),
                     ..._kalemler.asMap().entries.map((e) {
                       final k = e.value;
@@ -798,6 +824,16 @@ class _ServisFormuState extends State<ServisFormu> {
                                             : Colors.greenAccent)),
                               ],
                             ),
+                            if (fazla)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  'Aldığınız tutar toplamı aşıyor, fazlası işçilik olarak eklenir.',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.orange.shade300),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -878,7 +914,7 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
           .maybeSingle();
       final k = await _db
           .from('service_items')
-          .select()
+          .select('*, products(suppliers(name))')
           .eq('service_order_id', id)
           .isFilter('removed_at', null)
           .order('created_at');
@@ -927,12 +963,29 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
     final kapat = yeni == 'İptal edildi' || yeni == 'İade edildi';
 
     if (yeni == 'Teslim edildi' && kalan > 0.004) {
-      final ok = await _onay(
-          context,
-          'Teslim edilsin mi?',
-          'Müşteriden ${para(kalan)} tahsil edilmedi. Teslim ederseniz bu tutar müşterinin borcu olarak kalır.',
-          'Teslim et');
-      if (!ok) return;
+      final c = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Teslim edilsin mi?'),
+          content: Text('Müşteriden ${para(kalan)} tahsil edilmedi.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, 'vazgec'),
+                child: const Text('Vazgeç')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, 'borc'),
+                child: const Text('Borç kalsın, teslim et')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, 'para'),
+                child: const Text('Ödeme al')),
+          ],
+        ),
+      );
+      if (c == 'para') {
+        await _odemeAl();
+        return;
+      }
+      if (c != 'borc') return;
     } else if (kapat && odenen > 0.004) {
       final c = await showDialog<String>(
         context: context,
@@ -985,109 +1038,6 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
     }
   }
 
-  Future<void> _odemeAlEski() async {
-    final kalanKurus = (_sv('remaining') * 100).round();
-    if (kalanKurus <= 0) {
-      _mesaj(context, 'Bu serviste kalan tutar görünmüyor.');
-      return;
-    }
-    final tutar = TextEditingController();
-    final not = TextEditingController();
-    String yontem = 'nakit';
-    String? hata;
-    final tamam = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          title: const Text('Müşteriden ödeme al'),
-          content: SizedBox(
-            width: 400,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: tutar,
-                    autofocus: true,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                      labelText: 'Tutar',
-                      suffixText: '₺',
-                      helperText: 'Kalan: ${para(kalanKurus / 100)}',
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    children: odemeYontemleri.entries
-                        .map((e) => ChoiceChip(
-                              label: Text(e.value),
-                              selected: yontem == e.key,
-                              onSelected: (_) => setS(() => yontem = e.key),
-                            ))
-                        .toList(),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: not,
-                    decoration: const InputDecoration(
-                        labelText: 'Not', border: OutlineInputBorder()),
-                  ),
-                  if (hata != null) ...[
-                    const SizedBox(height: 12),
-                    Text(hata!,
-                        style: const TextStyle(color: Colors.redAccent)),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Vazgeç')),
-            FilledButton(
-              onPressed: () async {
-                final kurus = (sayi(tutar.text) * 100).round();
-                if (kurus <= 0) {
-                  setS(() => hata = 'Tutarı yazın.');
-                  return;
-                }
-                if (kurus > kalanKurus) {
-                  setS(() => hata =
-                      'Ödeme, kalan tutardan (${para(kalanKurus / 100)}) fazla olamaz.');
-                  return;
-                }
-                try {
-                  await _db.from('cash_transactions').insert({
-                    'tx_date': bugunTarih(),
-                    'direction': 'giris',
-                    'kind': 'musteri_odeme',
-                    'section': 'teknik',
-                    'amount': kurus / 100,
-                    'method': yontem,
-                    'description': not.text.trim(),
-                    'customer_id': _o!['customer_id'],
-                    'service_order_id': _o!['id'],
-                  });
-                  if (ctx.mounted) Navigator.pop(ctx, true);
-                } catch (e) {
-                  setS(() => hata = 'Kaydedilemedi: ${hataMetni(e)}');
-                }
-              },
-              child: const Text('Kaydet'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (tamam == true) _yukle();
-  }
-
   Future<void> _odemeAl() async {
     final o = _o;
     if (o == null) return;
@@ -1095,8 +1045,9 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
     final odenen = _sv('paid');
     final maliyet = _sv('parts_cost');
     final kalanKurus = ((toplam - odenen) * 100).round();
+    final kalanPoz = kalanKurus > 0 ? kalanKurus : 0;
     final tutar = TextEditingController(
-        text: kalanKurus > 0 ? sayiYaz(kalanKurus / 100) : '');
+        text: kalanPoz > 0 ? sayiYaz(kalanPoz / 100) : '');
     String yontem = 'nakit';
     String? hata;
     final sonuc = await showDialog<Map<String, dynamic>>(
@@ -1104,7 +1055,7 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) {
           final girilen = _k(tutar.text);
-          final fazla = girilen - kalanKurus;
+          final fazla = girilen - kalanPoz;
           final yeniToplam = fazla > 0 ? toplam + fazla / 100 : toplam;
           final kar = yeniToplam - maliyet;
           return AlertDialog(
@@ -1138,8 +1089,7 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
                           .map((e) => ChoiceChip(
                                 label: Text(e.value),
                                 selected: yontem == e.key,
-                                onSelected: (_) =>
-                                    setS(() => yontem = e.key),
+                                onSelected: (_) => setS(() => yontem = e.key),
                               ))
                           .toList(),
                     ),
@@ -1224,7 +1174,7 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
     }
     await _yukle();
     if (!mounted) return;
-    final kalanSonra = kalanKurus + ek - alinan;
+    final kalanSonra = kalanPoz + ek - alinan;
     if (kalanSonra <= 0 && !_kapaliDurumlar.contains(_durum)) {
       final evet = await _onay(
           context,
@@ -1341,6 +1291,32 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
     }
   }
 
+  Future<void> _kalemIade(Map<String, dynamic> k) async {
+    final maliyet = tam(k, 'qty') * alan(k, 'unit_cost');
+    final satis = tam(k, 'qty') * alan(k, 'unit_price');
+    if (_sv('total') - satis < _sv('paid') - 0.004) {
+      _mesaj(context,
+          'Bu parçayı çıkarırsanız toplam, ödenen tutarın altına düşer. Önce ödemeyi iptal edin veya iade edin.');
+      return;
+    }
+    final ok = await _onay(
+        context,
+        'Parça tedarikçiye iade edilsin mi?',
+        'Parça servisten çıkar, stoktan düşer ve tedarikçi borcunuzdan ${para(maliyet)} düşülür.',
+        'İade et');
+    if (!ok) return;
+    try {
+      await _db.rpc('return_service_part',
+          params: {'p_item': k['id'], 'p_reason': 'Müşteri vazgeçti'});
+      await _yukle();
+      if (!mounted) return;
+      _mesaj(context, 'Parça tedarikçiye iade edildi, borç düşüldü.');
+    } catch (e) {
+      if (!mounted) return;
+      _mesaj(context, 'İade edilemedi: ${hataMetni(e)}');
+    }
+  }
+
   Future<void> _kalemKaldir(Map<String, dynamic> k) async {
     final tutar = tam(k, 'qty') * alan(k, 'unit_price');
     if (_sv('total') - tutar < _sv('paid') - 0.004) {
@@ -1352,7 +1328,7 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
         context,
         'Kalem kaldırılsın mı?',
         k['product_id'] != null
-            ? 'Stoktan düşülen parça stoğa geri döner.'
+            ? 'Stoktan düşülen parça stoğa geri döner. Tedarikçi borcu değişmez. Parçayı tedarikçiye iade ediyorsanız "Tedarikçiye iade et" seçeneğini kullanın.'
             : 'Bu kalem servisten çıkarılır.',
         'Kaldır');
     if (!ok) return;
@@ -1463,6 +1439,15 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
       );
 
+  String _kalemAlt(Map<String, dynamic> k) {
+    final t = ((k['products'] as Map<String, dynamic>?)?['suppliers']
+        as Map<String, dynamic>?)?['name'];
+    final maliyet = k['unit_cost'] == null
+        ? ''
+        : ' • maliyet ${para(alan(k, 'unit_cost'))}';
+    return '${tam(k, 'qty')} adet × ${para(alan(k, 'unit_price'))}$maliyet${t == null ? '' : '\nTedarikçi: $t'}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final o = _o;
@@ -1489,6 +1474,8 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
             ? 'Garanti: $garanti gün (teslimden itibaren)'
             : 'Garanti: $garanti gün • bitiş ${tarih(teslim.add(Duration(days: garanti)).toIso8601String())}';
       }
+      final hazir =
+          _durum == 'Hazır' || _durum == 'Müşteriye haber verildi';
       govde = ListView(
         padding: const EdgeInsets.all(12),
         children: [
@@ -1507,6 +1494,16 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
               isThreeLine: true,
             ),
           ),
+          if (hazir && kalan > 0.004)
+            Card(
+              color: Colors.green.withValues(alpha: 0.18),
+              child: ListTile(
+                leading: const Icon(Icons.payments),
+                title: Text('Müşteriden alınacak: ${para(kalan)}',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ),
           Wrap(
             alignment: WrapAlignment.center,
             spacing: 6,
@@ -1520,6 +1517,7 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
                       : (kalan < -0.004
                           ? Colors.orangeAccent
                           : Colors.greenAccent)),
+              _kutu('Parça maliyeti', para(_sv('parts_cost'))),
               _kutu('Kâr (brüt)', para(_sv('profit')),
                   renk: _sv('profit') >= 0
                       ? Colors.greenAccent
@@ -1565,26 +1563,41 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
           ),
           if (_kalemler.isEmpty)
             const Padding(
-                padding: EdgeInsets.all(8), child: Text('Parça eklenmemiş.')),
+                padding: EdgeInsets.all(8),
+                child: Text(
+                    'Parça eklenmemiş. Arıza tespitinden sonra "Parça / işlem ekle" ile tedarikçi ve fiyatı girin.')),
           ..._kalemler.map((k) => Card(
                 child: ListTile(
                   title: Text('${k['description']}'),
-                  subtitle: Text(
-                      '${tam(k, 'qty')} adet × ${para(alan(k, 'unit_price'))}'),
+                  subtitle: Text(_kalemAlt(k)),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(para(tam(k, 'qty') * alan(k, 'unit_price')),
                           style: const TextStyle(fontWeight: FontWeight.bold)),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        tooltip: 'Kaldır',
-                        onPressed: () => _kalemKaldir(k),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        tooltip: 'Satış fiyatını değiştir',
-                        onPressed: () => _kalemFiyat(k),
+                      PopupMenuButton<String>(
+                        onSelected: (v) {
+                          if (v == 'fiyat') {
+                            _kalemFiyat(k);
+                          } else if (v == 'iade') {
+                            _kalemIade(k);
+                          } else {
+                            _kalemKaldir(k);
+                          }
+                        },
+                        itemBuilder: (_) => [
+                          const PopupMenuItem(
+                              value: 'fiyat',
+                              child: Text('Satış fiyatını değiştir')),
+                          if (k['product_id'] != null)
+                            const PopupMenuItem(
+                                value: 'iade',
+                                child: Text(
+                                    'Tedarikçiye iade et (borçtan düşer)')),
+                          const PopupMenuItem(
+                              value: 'kaldir',
+                              child: Text('Servisten kaldır')),
+                        ],
                       ),
                     ],
                   ),
@@ -1639,7 +1652,7 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
               ),
             );
           }),
-         FotoPaneli(servisId: '${o['id']}'),
+          FotoPaneli(servisId: '${o['id']}'),
           _baslik('Durum geçmişi'),
           ..._gecmis.map((h) => ListTile(
                 dense: true,
@@ -1665,7 +1678,7 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
               IconButton(
                   onPressed: o == null ? null : _duzenle,
                   icon: const Icon(Icons.edit),
-                tooltip: 'Bilgileri düzenle'),
+                  tooltip: 'Bilgileri düzenle'),
               IconButton(
                   onPressed: o == null
                       ? null

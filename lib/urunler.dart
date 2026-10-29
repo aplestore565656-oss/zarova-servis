@@ -537,7 +537,7 @@ class _UrunFormuState extends State<UrunFormu> {
         _kurNotu = 'Kur alınamadı, kuru elle yazın.';
       } else {
         _kur.text = k.satis.toStringAsFixed(4).replaceAll('.', ',');
-        _kurNotu = 'TCMB döviz satış kuru (${k.tarih})';
+        _kurNotu = 'Kur kaynağı (${k.tarih})';
       }
     });
   }

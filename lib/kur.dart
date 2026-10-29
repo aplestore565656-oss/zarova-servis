@@ -2,27 +2,53 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'yardimci.dart';
 
 class KurBilgisi {
   final double satis;
-  final String tarih;
-  const KurBilgisi(this.satis, this.tarih);
+  final String tarih; // kaynak ve zaman açıklaması
+  final bool elle;
+  const KurBilgisi(this.satis, this.tarih, {this.elle = false});
 }
 
 KurBilgisi? _onbellek;
 DateTime? _onbellekZamani;
 
-/// TCMB günlük kur dosyasından dolar döviz satış kurunu getirir.
-/// Alınamazsa null verir, o zaman kur elle yazılır.
-Future<KurBilgisi?> dolarKuruGetir({bool zorla = false}) async {
-  final z = _onbellekZamani;
-  if (!zorla &&
-      _onbellek != null &&
-      z != null &&
-      DateTime.now().difference(z).inMinutes < 3) {
-    return _onbellek;
+String _iki(int n) => n.toString().padLeft(2, '0');
+String _saat(DateTime d) => '${_iki(d.hour)}:${_iki(d.minute)}';
+String _gunSaat(DateTime d) => '${_iki(d.day)}.${_iki(d.month)} ${_saat(d)}';
+
+double? _kurSayi(dynamic v) {
+  if (v == null) return null;
+  if (v is num) return v.toDouble();
+  var t = '$v'.trim().replaceAll('%', '').replaceAll(' ', '');
+  if (t.isEmpty) return null;
+  if (t.contains(',')) {
+    t = t.replaceAll('.', '').replaceAll(',', '.');
   }
+  return double.tryParse(t);
+}
+
+Future<KurBilgisi?> _elleKur() async {
+  try {
+    final r = await Supabase.instance.client
+        .from('business_settings')
+        .select('usd_rate, usd_rate_at')
+        .eq('id', 1)
+        .maybeSingle();
+    if (r == null) return null;
+    final v = _kurSayi(r['usd_rate']);
+    final at = DateTime.tryParse('${r['usd_rate_at'] ?? ''}')?.toLocal();
+    if (v == null || v <= 0 || at == null) return null;
+    if (DateTime.now().difference(at).inHours >= 24) return null;
+    return KurBilgisi(v, 'elle girildi ${_gunSaat(at)}', elle: true);
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<KurBilgisi?> _tcmbKur() async {
   try {
     final r = await http
         .get(Uri.parse('https://www.tcmb.gov.tr/kurlar/today.xml'))
@@ -34,15 +60,64 @@ Future<KurBilgisi?> dolarKuruGetir({bool zorla = false}) async {
         .firstMatch(govde);
     final k = double.tryParse(m?.group(1) ?? '');
     if (k == null || k <= 0) return null;
-    _onbellek = KurBilgisi(k, tarih);
-    _onbellekZamani = DateTime.now();
-    return _onbellek;
+    return KurBilgisi(k, 'TCMB $tarih');
   } catch (_) {
     return null;
   }
 }
 
-/// Ana menünün üstündeki canlı dolar kuru kutusu.
+Future<KurBilgisi?> _canliKur(double? referans) async {
+  try {
+    final r = await http
+        .get(Uri.parse('https://finans.truncgil.com/today.json'))
+        .timeout(const Duration(seconds: 6));
+    if (r.statusCode != 200) return null;
+    final j = jsonDecode(utf8.decode(r.bodyBytes, allowMalformed: true));
+    if (j is! Map) return null;
+    final d = j['ABD DOLARI'] ?? j['USD'];
+    if (d is! Map) return null;
+    final v = _kurSayi(
+        d['Satış'] ?? d['Satis'] ?? d['Selling'] ?? d['selling'] ?? d['sell']);
+    if (v == null || v < 1 || v > 1000) return null;
+    if (referans != null && (v - referans).abs() / referans > 0.10) return null;
+    return KurBilgisi(v, 'canlı piyasa ${_saat(DateTime.now())}');
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Sıra: elle girilen kur (24 saat) > canlı piyasa > TCMB.
+Future<KurBilgisi?> dolarKuruGetir({bool zorla = false}) async {
+  final e = await _elleKur();
+  if (e != null) return e;
+  final z = _onbellekZamani;
+  if (!zorla &&
+      _onbellek != null &&
+      z != null &&
+      DateTime.now().difference(z).inMinutes < 3) {
+    return _onbellek;
+  }
+  final tcmb = await _tcmbKur();
+  final canli = await _canliKur(tcmb?.satis);
+  final sonuc = canli ?? tcmb;
+  if (sonuc != null) {
+    _onbellek = sonuc;
+    _onbellekZamani = DateTime.now();
+  }
+  return sonuc ?? _onbellek;
+}
+
+/// Kendi kurunuzu kaydeder. null verirseniz canlı kura döner.
+Future<void> elleKurKaydet(double? v) async {
+  await Supabase.instance.client.from('business_settings').update({
+    'usd_rate': v == null ? null : (v * 10000).round() / 10000,
+    'usd_rate_at': v == null ? null : DateTime.now().toUtc().toIso8601String(),
+  }).eq('id', 1);
+  _onbellek = null;
+  _onbellekZamani = null;
+}
+
+/// Ana menünün üstündeki dolar kuru kutusu.
 class KurRozeti extends StatefulWidget {
   const KurRozeti({super.key});
 
@@ -51,7 +126,7 @@ class KurRozeti extends StatefulWidget {
 }
 
 class _KurRozetiState extends State<KurRozeti> {
-  KurBilgisi? _k;
+  KurBilgisi? _kur;
   bool _yuk = true;
   bool _hata = false;
   Timer? _zaman;
@@ -77,7 +152,7 @@ class _KurRozetiState extends State<KurRozeti> {
     setState(() {
       _yuk = false;
       if (k != null) {
-        _k = k;
+        _kur = k;
         _hata = false;
       } else {
         _hata = true;
@@ -106,25 +181,107 @@ class _KurRozetiState extends State<KurRozeti> {
     );
   }
 
+  Future<void> _duzenle() async {
+    final c = TextEditingController(
+        text: _kur == null
+            ? ''
+            : _kur!.satis.toStringAsFixed(4).replaceAll('.', ','));
+    String? hata;
+    final sonuc = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('Dolar kurunu ayarla'),
+          content: SizedBox(
+            width: 380,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Yazdığınız kur tüm ekranlarda ve tüm cihazlarda 24 saat boyunca kullanılır. Canlı kura dönmek için "Canlıya dön" deyin.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: c,
+                  autofocus: true,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: '1 dolar kaç TL?',
+                      suffixText: '₺',
+                      border: OutlineInputBorder()),
+                ),
+                if (hata != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(hata!,
+                        style: const TextStyle(color: Colors.redAccent)),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Vazgeç')),
+            if (_kur?.elle == true)
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, 'canli'),
+                  child: const Text('Canlıya dön')),
+            FilledButton(
+              onPressed: () {
+                final v = sayi(c.text);
+                if (v < 1 || v > 1000) {
+                  setS(() => hata = 'Geçerli bir kur yazın.');
+                  return;
+                }
+                Navigator.pop(ctx, 'kaydet');
+              },
+              child: const Text('Kaydet'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (sonuc == null) return;
+    try {
+      if (sonuc == 'canli') {
+        await elleKurKaydet(null);
+      } else {
+        await elleKurKaydet(sayi(c.text));
+      }
+      await _getir(zorla: true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Kaydedilemedi: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final k = _k;
+    final k = _kur;
     final kurYazi =
         k == null ? '—' : k.satis.toStringAsFixed(4).replaceAll('.', ',');
     final alt = k == null
         ? (_yuk ? 'Kur alınıyor...' : 'Kur alınamadı, yenile düğmesine basın')
-        : 'TCMB döviz satış kuru • ${k.tarih}${_hata ? ' • yenilenemedi' : ''}';
+        : 'Kaynak: ${k.tarih}${_hata ? ' • yenilenemedi' : ''}';
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.4)),
+        border: Border.all(
+            color: (k?.elle == true ? Colors.orangeAccent : Colors.greenAccent)
+                .withValues(alpha: 0.5)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.attach_money, color: Colors.greenAccent),
+          Icon(Icons.attach_money,
+              color: k?.elle == true ? Colors.orangeAccent : Colors.greenAccent),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -134,7 +291,11 @@ class _KurRozetiState extends State<KurRozeti> {
                     style: const TextStyle(
                         fontSize: 18, fontWeight: FontWeight.bold)),
                 Text(alt,
-                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: k?.elle == true
+                            ? Colors.orangeAccent
+                            : Colors.grey)),
               ],
             ),
           ),
@@ -142,6 +303,11 @@ class _KurRozetiState extends State<KurRozeti> {
             onPressed: _hesapla,
             tooltip: 'Dolar hesapla',
             icon: const Icon(Icons.calculate),
+          ),
+          IconButton(
+            onPressed: _duzenle,
+            tooltip: 'Kurumu kendim yazayım',
+            icon: const Icon(Icons.edit),
           ),
           IconButton(
             onPressed: _yuk ? null : () => _getir(zorla: true),
@@ -219,7 +385,7 @@ class _DolarCeviriState extends State<DolarCeviri> {
         _not = 'Kur otomatik alınamadı, kuru elle yazın.';
       } else {
         _kur.text = k.satis.toStringAsFixed(4).replaceAll('.', ',');
-        _not = 'TCMB döviz satış kuru (${k.tarih})';
+        _not = 'Kur kaynağı (${k.tarih})';
       }
     });
     _hesapla();

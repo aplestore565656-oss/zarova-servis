@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'alislar.dart' show hataMetni, odemeYontemleri;
 import 'ortak.dart';
@@ -264,7 +265,20 @@ class _HurdaFormuState extends State<HurdaFormu> {
         children: [
           girdi(_marka, 'Marka'),
           girdi(_model, 'Model'),
-          girdi(_imei, 'IMEI'),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: TextField(
+              controller: _imei,
+              keyboardType: TextInputType.number,
+              maxLength: 15,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(15),
+              ],
+              decoration: const InputDecoration(
+                  labelText: 'IMEI (15 hane)', border: OutlineInputBorder()),
+            ),
+          ),
           girdi(_kaynak, 'Kimden / nereden geldi'),
           Card(
             child: ListTile(
