@@ -521,7 +521,9 @@ class _MusteriDetaySayfasiState extends State<MusteriDetaySayfasi> {
                           leading: Icon(Icons.circle,
                               size: 14, color: durumRengi(durum)),
                           trailing: Text(
-                            kalan > 0.004 ? 'Kalan ${para(kalan)}' : 'Ödendi',
+                            kalan > 0.004
+                                ? 'Ödenen ${para(o == null ? 0.0 : alan(o, 'paid'))}\nKalan ${para(kalan)}'
+                                : 'Ödendi ${para(o == null ? 0.0 : alan(o, 'paid'))}',
                             style: TextStyle(
                                 color: kalan > 0.004
                                     ? Colors.redAccent

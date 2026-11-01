@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'alislar.dart' show hataMetni, odemeYontemleri, bugunTarih;
+import 'alislar.dart' show hataMetni, odemeYontemleri;
 import 'ana_menu.dart' show YildizArkaplan;
 import 'yardimci.dart';
 
@@ -26,6 +26,34 @@ const _elleTipler = ['diger_gelir', 'acilis', 'gider', 'para_cekme'];
 const _giderKategorileri = [
   'Kira', 'Elektrik', 'Su / doğalgaz', 'İnternet / telefon', 'Yemek', 'Diğer'
 ];
+
+String _cihazAdi(Map<String, dynamic> x) {
+  final s = x['service_orders'] as Map<String, dynamic>?;
+  if (s == null) return '';
+  return '${s['brand'] ?? ''} ${s['model'] ?? ''}'.trim();
+}
+
+String _parcaListesi(Map<String, dynamic> x) {
+  final s = x['service_orders'] as Map<String, dynamic>?;
+  if (s != null) {
+    return List<Map<String, dynamic>>.from(s['service_items'] ?? const [])
+        .where((e) => e['removed_at'] == null)
+        .map((e) => '${e['description'] ?? ''}'.trim())
+        .where((e) => e.isNotEmpty)
+        .join(', ');
+  }
+  final p = x['purchase_orders'] as Map<String, dynamic>?;
+  if (p != null) {
+    return List<Map<String, dynamic>>.from(p['purchase_order_items'] ?? const [])
+        .where((e) => e['removed_at'] == null)
+        .map((e) =>
+            '${(e['products'] as Map<String, dynamic>?)?['name'] ?? ''} ×${e['qty']}'
+                .trim())
+        .where((e) => e.isNotEmpty)
+        .join(', ');
+  }
+  return '';
+}
 
 class KasaSayfasi extends StatefulWidget {
   const KasaSayfasi({super.key});
@@ -54,17 +82,29 @@ class _KasaSayfasiState extends State<KasaSayfasi> {
     });
     try {
       final b = await _db.from('cash_balance').select().single();
-      final h = await _db
-          .from('cash_transactions')
-          .select('*, customers(full_name), suppliers(name)')
-          .isFilter('voided_at', null)
-          .order('tx_date', ascending: false)
-          .order('created_at', ascending: false)
-          .limit(300);
+      List<Map<String, dynamic>> h;
+      try {
+        h = List<Map<String, dynamic>>.from(await _db
+            .from('cash_transactions')
+            .select(
+                '*, customers(full_name), suppliers(name), service_orders(order_no, brand, model, problem, work_done, service_items(description, removed_at)), purchase_orders(purchase_order_items(qty, removed_at, products(name)))')
+            .isFilter('voided_at', null)
+            .order('tx_date', ascending: false)
+            .order('created_at', ascending: false)
+            .limit(300));
+      } catch (_) {
+        h = List<Map<String, dynamic>>.from(await _db
+            .from('cash_transactions')
+            .select('*, customers(full_name), suppliers(name)')
+            .isFilter('voided_at', null)
+            .order('tx_date', ascending: false)
+            .order('created_at', ascending: false)
+            .limit(300));
+      }
       if (!mounted) return;
       setState(() {
         _bakiye = alan(b, 'balance');
-        _liste = List<Map<String, dynamic>>.from(h);
+        _liste = h;
         _yukleniyor = false;
       });
     } catch (e) {
@@ -77,7 +117,9 @@ class _KasaSayfasiState extends State<KasaSayfasi> {
   }
 
   double _bugun(String yon) {
-    final t = bugunTarih();
+    final n = DateTime.now();
+    final t =
+        '${n.year}-${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
     return _liste
         .where((x) => '${x['tx_date']}' == t && x['direction'] == yon)
         .fold(0.0, (s, x) => s + alan(x, 'amount'));
@@ -144,26 +186,51 @@ class _KasaSayfasiState extends State<KasaSayfasi> {
     final renk = giris ? Colors.greenAccent : Colors.redAccent;
     final tip = '${x['kind']}';
     final kat = '${x['category'] ?? ''}'.trim();
-    final baslik = (_tipAdlari[tip] ?? tip) + (kat.isEmpty ? '' : ' • $kat');
+    final tipAdi = (_tipAdlari[tip] ?? tip) + (kat.isEmpty ? '' : ' • $kat');
+    final siparis = x['service_orders'] as Map<String, dynamic>?;
+    final cihaz = _cihazAdi(x);
     final kisi = (x['customers'] as Map<String, dynamic>?)?['full_name'] ??
         (x['suppliers'] as Map<String, dynamic>?)?['name'];
     final ac = '${x['description'] ?? ''}'.trim();
-    final detay = [
-      tarih('${x['tx_date']}'),
-      odemeYontemleri['${x['method']}'] ?? '',
-      if (kisi != null) '$kisi',
-      if (ac.isNotEmpty) ac,
-    ].join(' • ');
+    final parca = _parcaListesi(x);
+    final satirlar = <String>[
+      [
+        if (siparis != null) tipAdi,
+        tarih('${x['tx_date']}'),
+        odemeYontemleri['${x['method']}'] ?? '',
+        if (kisi != null) '$kisi',
+      ].where((e) => e.isNotEmpty).join(' • '),
+    ];
+    if (siparis != null) {
+      final ariza = '${siparis['problem'] ?? ''}'.trim();
+      final yapilan = '${siparis['work_done'] ?? ''}'.trim();
+      if (yapilan.isNotEmpty) {
+        satirlar.add('Yapılan: $yapilan');
+      } else if (ariza.isNotEmpty) {
+        satirlar.add('Arıza: $ariza');
+      }
+      satirlar.add(parca.isEmpty ? 'Parça: yok' : 'Parça: $parca');
+      satirlar.add('${siparis['order_no']}');
+    } else {
+      if (parca.isNotEmpty) satirlar.add('Parça: $parca');
+      if (ac.isNotEmpty) satirlar.add(ac);
+    }
+    final servisSatiri = siparis != null && cihaz.isNotEmpty;
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: ListTile(
+        isThreeLine: satirlar.length > 1,
         leading: CircleAvatar(
           backgroundColor: renk.withValues(alpha: 0.18),
           child: Icon(giris ? Icons.arrow_downward : Icons.arrow_upward,
               color: renk),
         ),
-        title: Text(baslik, style: const TextStyle(fontSize: 16)),
-        subtitle: Text(detay),
+        title: Text(servisSatiri ? cihaz : tipAdi,
+            style: TextStyle(
+                fontSize: servisSatiri ? 18 : 16,
+                fontWeight: servisSatiri ? FontWeight.w900 : FontWeight.w500,
+                color: Colors.white)),
+        subtitle: Text(satirlar.join('\n')),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

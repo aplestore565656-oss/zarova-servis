@@ -7,13 +7,6 @@ import 'yedek.dart' show csvOlustur, dosyaKaydet;
 
 final _db = Supabase.instance.client;
 
-class _G {
-  final String a;
-  final num? v;
-  final String t; // b = başlık, p = para, s = sayı
-  const _G(this.a, this.v, this.t);
-}
-
 class RaporlarSayfasi extends StatefulWidget {
   const RaporlarSayfasi({super.key});
 
@@ -56,10 +49,9 @@ class _RaporlarSayfasiState extends State<RaporlarSayfasi> {
         _bas = DateTime(n.year, 1, 1);
         _bit = bugun;
         break;
-      case 'ay':
+      default:
         _bas = DateTime(n.year, n.month, 1);
         _bit = bugun;
-        break;
     }
   }
 
@@ -106,56 +98,40 @@ class _RaporlarSayfasiState extends State<RaporlarSayfasi> {
     }
   }
 
-  List<_G> _liste() {
-    final r = _r!;
-    final d = _d!;
-    final brut = alan(r, 'brut_kar');
-    final gider = alan(r, 'gider');
-    return [
-      const _G('Servis (teslim edilenler)', null, 'b'),
-      _G('Servis kabul sayısı', tam(r, 'kabul'), 's'),
-      _G('Teslim edilen servis', tam(r, 'teslim'), 's'),
-      _G('Ciro (servis tutarı)', alan(r, 'ciro'), 'p'),
-      _G('Parça satışı', alan(r, 'parca_satis'), 'p'),
-      _G('Parça maliyeti', alan(r, 'parca_maliyet'), 'p'),
-      _G('İşçilik', alan(r, 'iscilik'), 'p'),
-      _G('Brüt kâr', brut, 'p'),
-      const _G('Kasa hareketleri', null, 'b'),
-      _G('Tahsilat', alan(r, 'tahsilat'), 'p'),
-      _G('Müşteri iadesi', alan(r, 'musteri_iade'), 'p'),
-      _G('Gider', gider, 'p'),
-      _G('Tedarikçi ödemesi', alan(r, 'tedarikci_odeme'), 'p'),
-      _G('Diğer gelir', alan(r, 'diger_gelir'), 'p'),
-      _G('Para çekme', alan(r, 'para_cekme'), 'p'),
-      const _G('Hurda cihazlar', null, 'b'),
-      _G('Hurda alış (kasadan çıkan)', alan(r, 'hurda_alis'), 'p'),
-      _G('Hurda satış (kasaya giren)', alan(r, 'hurda_satis'), 'p'),
-      _G('Hurda kârı (satılanlar)', alan(r, 'hurda_kar'), 'p'),
-      const _G('Alış', null, 'b'),
-      _G('Parça alışı (fatura toplamı)', alan(r, 'alis_toplam'), 'p'),
-      const _G('Sonuç', null, 'b'),
-      _G('Tahmini net kâr (brüt kâr − gider)', brut - gider, 'p'),
-      const _G('Şu anki durum (tarihten bağımsız)', null, 'b'),
-      _G('Kasa', alan(d, 'cash'), 'p'),
-      _G('Müşteri alacağı', alan(d, 'customer_receivable'), 'p'),
-      _G('Tedarikçi borcu', alan(d, 'supplier_debt'), 'p'),
-      _G('Stok değeri', alan(d, 'stock_value'), 'p'),
-    ];
-  }
+  double _v(String k) => alan(_r!, k);
 
   Future<void> _disaAktar() async {
     try {
+      String p(double x) => x.toStringAsFixed(2).replaceAll('.', ',');
+      final brut = _v('brut_kar');
+      final hk = _v('hurda_kar');
+      final gider = _v('gider');
       final satirlar = <Map<String, dynamic>>[
         {'Kalem': 'Dönem', 'Değer': '${tarih(_bas.toIso8601String())} - ${tarih(_bit.toIso8601String())}'},
-        ..._liste().where((x) => x.t != 'b').map((x) => {
-              'Kalem': x.a,
-              'Değer': x.t == 'p'
-                  ? x.v!.toDouble().toStringAsFixed(2).replaceAll('.', ',')
-                  : '${x.v}',
-            }),
+        {'Kalem': 'Net kâr', 'Değer': p(brut + hk - gider)},
+        {'Kalem': 'Servis kârı', 'Değer': p(brut)},
+        {'Kalem': 'Hurda kârı', 'Değer': p(hk)},
+        {'Kalem': 'Gider', 'Değer': p(gider)},
+        {'Kalem': 'Müşteriden alınan', 'Değer': p(_v('tahsilat'))},
+        {'Kalem': 'Teslim edilen iş', 'Değer': '${tam(_r!, 'teslim')}'},
+        {'Kalem': 'Yeni gelen servis', 'Değer': '${tam(_r!, 'kabul')}'},
+        {'Kalem': 'Ciro (servis tutarı)', 'Değer': p(_v('ciro'))},
+        {'Kalem': 'Parça satışı', 'Değer': p(_v('parca_satis'))},
+        {'Kalem': 'Parça maliyeti', 'Değer': p(_v('parca_maliyet'))},
+        {'Kalem': 'İşçilik', 'Değer': p(_v('iscilik'))},
+        {'Kalem': 'Parça alışı (fatura)', 'Değer': p(_v('alis_toplam'))},
+        {'Kalem': 'Tedarikçi ödemesi', 'Değer': p(_v('tedarikci_odeme'))},
+        {'Kalem': 'Müşteri iadesi', 'Değer': p(_v('musteri_iade'))},
+        {'Kalem': 'Diğer gelir', 'Değer': p(_v('diger_gelir'))},
+        {'Kalem': 'Para çekme', 'Değer': p(_v('para_cekme'))},
+        {'Kalem': 'Hurda alış', 'Değer': p(_v('hurda_alis'))},
+        {'Kalem': 'Hurda satış', 'Değer': p(_v('hurda_satis'))},
+        {'Kalem': 'Kasa (şu an)', 'Değer': p(alan(_d!, 'cash'))},
+        {'Kalem': 'Müşteri alacağı (şu an)', 'Değer': p(alan(_d!, 'customer_receivable'))},
+        {'Kalem': 'Tedarikçi borcu (şu an)', 'Değer': p(alan(_d!, 'supplier_debt'))},
+        {'Kalem': 'Stok değeri (şu an)', 'Değer': p(alan(_d!, 'stock_value'))},
       ];
-      final yol = await dosyaKaydet(
-          'rapor_${_t(_bas)}_${_t(_bit)}.csv',
+      final yol = await dosyaKaydet('rapor_${_t(_bas)}_${_t(_bit)}.csv',
           csvOlustur(satirlar, ['Kalem', 'Değer']));
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -174,6 +150,46 @@ class _RaporlarSayfasiState extends State<RaporlarSayfasi> {
           selected: _tur == tur,
           onSelected: (_) => _sec(tur),
         ),
+      );
+
+  Widget _kart(String baslik, String deger, Color renk, {bool genis = false}) {
+    return SizedBox(
+      width: genis ? 342 : 168,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            children: [
+              Text(baslik,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12.5)),
+              const SizedBox(height: 6),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(deger,
+                    style: TextStyle(
+                        fontSize: genis ? 26 : 18,
+                        fontWeight: FontWeight.bold,
+                        color: renk)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _baslik(String t) => Padding(
+        padding: const EdgeInsets.fromLTRB(4, 16, 4, 6),
+        child: Text(t,
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+      );
+
+  Widget _satir(String a, String b) => ListTile(
+        dense: true,
+        title: Text(a),
+        trailing:
+            Text(b, style: const TextStyle(fontWeight: FontWeight.bold)),
       );
 
   @override
@@ -198,34 +214,72 @@ class _RaporlarSayfasiState extends State<RaporlarSayfasi> {
         ),
       );
     } else {
+      final r = _r!;
+      final d = _d!;
+      final brut = _v('brut_kar');
+      final hk = _v('hurda_kar');
+      final gider = _v('gider');
+      final net = brut + hk - gider;
+      Color kr(double x) => x >= 0 ? Colors.greenAccent : Colors.redAccent;
       govde = ListView(
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-        children: _liste().map((x) {
-          if (x.t == 'b') {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(4, 14, 4, 4),
-              child: Text(x.a,
-                  style: const TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.bold)),
-            );
-          }
-          Color? renk;
-          if (x.a.contains('kâr') && x.v != null) {
-            renk = x.v! >= 0 ? Colors.greenAccent : Colors.redAccent;
-          }
-          return Card(
-            margin: const EdgeInsets.symmetric(vertical: 3),
-            child: ListTile(
-              dense: true,
-              title: Text(x.a),
-              trailing: Text(
-                x.t == 'p' ? para(x.v!.toDouble()) : '${x.v}',
-                style: TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 16, color: renk),
+        children: [
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 6,
+            runSpacing: 2,
+            children: [
+              _kart('NET KÂR (servis kârı + hurda kârı − gider)', para(net),
+                  kr(net),
+                  genis: true),
+              _kart('Servis kârı', para(brut), kr(brut)),
+              _kart('Hurda kârı', para(hk), kr(hk)),
+              _kart('Gider', para(gider), Colors.redAccent),
+              _kart('Müşteriden alınan', para(_v('tahsilat')),
+                  Colors.greenAccent),
+              _kart('Teslim edilen iş', '${tam(r, 'teslim')}', Colors.white),
+            ],
+          ),
+          _baslik('Şu anki durum (tarihten bağımsız)'),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 6,
+            runSpacing: 2,
+            children: [
+              _kart('Kasa', para(alan(d, 'cash')), Colors.cyanAccent),
+              _kart('Müşteri alacağı', para(alan(d, 'customer_receivable')),
+                  Colors.orangeAccent),
+              _kart('Tedarikçi borcu', para(alan(d, 'supplier_debt')),
+                  Colors.redAccent),
+              _kart('Stok değeri', para(alan(d, 'stock_value')),
+                  Colors.lightBlueAccent),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Theme(
+              data:
+                  Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                title: const Text('Ayrıntılar'),
+                children: [
+                  _satir('Yeni gelen servis', '${tam(r, 'kabul')}'),
+                  _satir('Ciro (servis tutarı)', para(_v('ciro'))),
+                  _satir('Parça satışı', para(_v('parca_satis'))),
+                  _satir('Parça maliyeti', para(_v('parca_maliyet'))),
+                  _satir('İşçilik', para(_v('iscilik'))),
+                  _satir('Parça alışı (fatura)', para(_v('alis_toplam'))),
+                  _satir('Tedarikçi ödemesi', para(_v('tedarikci_odeme'))),
+                  _satir('Müşteri iadesi', para(_v('musteri_iade'))),
+                  _satir('Diğer gelir', para(_v('diger_gelir'))),
+                  _satir('Para çekme', para(_v('para_cekme'))),
+                  _satir('Hurda alış (kasadan çıkan)', para(_v('hurda_alis'))),
+                  _satir('Hurda satış (kasaya giren)', para(_v('hurda_satis'))),
+                ],
               ),
             ),
-          );
-        }).toList(),
+          ),
+        ],
       );
     }
     return Theme(
@@ -249,7 +303,7 @@ class _RaporlarSayfasiState extends State<RaporlarSayfasi> {
           ),
           body: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 700),
+              constraints: const BoxConstraints(maxWidth: 720),
               child: Column(
                 children: [
                   SingleChildScrollView(

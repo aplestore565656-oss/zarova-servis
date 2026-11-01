@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'alacak_defteri.dart';
 import 'alislar.dart' show hataMetni;
+import 'kasa.dart';
+import 'tedarikciler.dart';
 import 'yardimci.dart';
 
 final _db = Supabase.instance.client;
@@ -49,6 +52,11 @@ class _KasaOzetiState extends State<KasaOzeti> {
     }
   }
 
+  Future<void> _ac(Widget sayfa) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => sayfa));
+    if (mounted) _yukle();
+  }
+
   double _b(String m) {
     final x = _yontem[m];
     return x == null ? 0.0 : alan(x, 'balance');
@@ -61,47 +69,59 @@ class _KasaOzetiState extends State<KasaOzeti> {
   }
 
   Widget _kutu(String baslik, IconData ikon, double deger, Color renk,
-      {String? alt}) {
+      {String? alt, VoidCallback? onTap}) {
     return Expanded(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 3),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: renk.withValues(alpha: 0.45)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(ikon, size: 14, color: renk),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(baslik,
-                      overflow: TextOverflow.ellipsis,
-                      style:
-                          const TextStyle(fontSize: 12, color: Colors.white70)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(para(deger),
-                  style: TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold, color: renk)),
-            ),
-            if (alt != null && alt.isNotEmpty)
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(alt,
-                    style: const TextStyle(fontSize: 10.5, color: Colors.grey)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onTap,
+            child: Ink(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: renk.withValues(alpha: 0.45)),
               ),
-          ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(ikon, size: 14, color: renk),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(baslik,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.white70)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(para(deger),
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: renk)),
+                  ),
+                  if (alt != null && alt.isNotEmpty)
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(alt,
+                          style: const TextStyle(
+                              fontSize: 10.5, color: Colors.grey)),
+                    ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -124,30 +144,36 @@ class _KasaOzetiState extends State<KasaOzeti> {
     } else {
       final d = _d!;
       final kasa = alan(d, 'cash');
+      void kasaAc() => _ac(const KasaSayfasi());
       govde = Column(
         children: [
           Row(
             children: [
               _kutu('Nakit', Icons.payments, _b('nakit'), Colors.greenAccent,
-                  alt: _bugun('nakit')),
+                  alt: _bugun('nakit'), onTap: kasaAc),
               _kutu('Kart', Icons.credit_card, _b('kart'),
                   Colors.lightBlueAccent,
-                  alt: _bugun('kart')),
+                  alt: _bugun('kart'), onTap: kasaAc),
               _kutu('Havale/EFT', Icons.account_balance, _b('havale'),
                   Colors.purpleAccent,
-                  alt: _bugun('havale')),
+                  alt: _bugun('havale'), onTap: kasaAc),
             ],
           ),
           const SizedBox(height: 6),
           Row(
             children: [
               _kutu('Toplam kasa', Icons.account_balance_wallet, kasa,
-                 kasa >= 0 ? Colors.cyanAccent : Colors.redAccent,
-                  alt: 'Borç ödenince: ${para(kasa - alan(d, 'supplier_debt'))}'),
-              _kutu('Müşteri alacağı', Icons.people,
-                  alan(d, 'customer_receivable'), Colors.orangeAccent),
+                  kasa >= 0 ? Colors.cyanAccent : Colors.redAccent,
+                  alt: 'Borç ödenince: ${para(kasa - alan(d, 'supplier_debt'))}',
+                  onTap: kasaAc),
+              _kutu('Müşteri alacağı', Icons.menu_book,
+                  alan(d, 'customer_receivable'), Colors.orangeAccent,
+                  alt: 'Alacak defteri için dokunun',
+                  onTap: () => _ac(const AlacakDefteriSayfasi())),
               _kutu('Tedarikçi borcu', Icons.local_shipping,
-                  alan(d, 'supplier_debt'), Colors.redAccent),
+                  alan(d, 'supplier_debt'), Colors.redAccent,
+                  alt: 'Tedarikçiler için dokunun',
+                  onTap: () => _ac(const TedarikcilerSayfasi())),
             ],
           ),
         ],

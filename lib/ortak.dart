@@ -6,7 +6,14 @@ import 'yardimci.dart';
 ThemeData koyuTema() => ThemeData(
     brightness: Brightness.dark,
     colorSchemeSeed: Colors.cyan,
-    useMaterial3: true);
+    useMaterial3: true,
+    listTileTheme: const ListTileThemeData(
+        textColor: Colors.white, iconColor: Colors.white70),
+    expansionTileTheme: const ExpansionTileThemeData(
+        textColor: Colors.white,
+        collapsedTextColor: Colors.white,
+        iconColor: Colors.white70,
+        collapsedIconColor: Colors.white70));
 
 class Sayfa extends StatelessWidget {
   final String baslik;

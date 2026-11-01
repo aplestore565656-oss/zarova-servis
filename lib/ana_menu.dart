@@ -12,6 +12,8 @@ import 'kasa_ozeti.dart';
 import 'kur.dart';
 import 'musteriler.dart';
 import 'ozet.dart';
+import 'alacak_defteri.dart';
+import 'servis_listesi.dart';
 import 'raporlar.dart';
 import 'servisler.dart';
 import 'tedarikciler.dart';
@@ -169,13 +171,14 @@ const _turuncu = Color(0xFFFBBF24);
 const _mor = Color(0xFFA78BFA);
 
 const _ogeler = <_Oge>[
-  _Oge(Icons.build, 'Servis Kayıtları', _mavi, ServislerSayfasi()),
+  _Oge(Icons.build, 'Servis Kayıtları', _mavi, ServisListesi()),
   _Oge(Icons.people, 'Müşteriler', _mavi, MusterilerSayfasi()),
   _Oge(Icons.inventory_2, 'Stok ve Parçalar', _mavi,
       UrunlerSayfasi(bolum: 'teknik')),
   _Oge(Icons.add_shopping_cart, 'Parça Alışları', _mavi, AlislarSayfasi()),
   _Oge(Icons.local_shipping, 'Tedarikçiler', _mavi, TedarikcilerSayfasi()),
   _Oge(Icons.account_balance_wallet, 'Kasa', _yesil, KasaSayfasi()),
+  _Oge(Icons.menu_book, 'Alacak Defteri', _turuncu, AlacakDefteriSayfasi()),
   _Oge(Icons.event_note, 'Günlük Rapor', _turuncu, GunRaporuSayfasi()),
   _Oge(Icons.bar_chart, 'Raporlar', _turuncu, RaporlarSayfasi()),
   // Genel arama şeridi menünün üstüne taşındı
@@ -236,6 +239,26 @@ int _yenile = 0;
               ),
             ),
             actions: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 190),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.account_circle,
+                        size: 18, color: Colors.white70),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        Supabase.instance.client.auth.currentUser?.email ?? '',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 12, color: Colors.white70),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               TextButton.icon(
                 onPressed: () => Supabase.instance.client.auth.signOut(),
                 icon: const Icon(Icons.logout),

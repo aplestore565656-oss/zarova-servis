@@ -52,7 +52,7 @@ Color durumRengi(String d) {
     case 'Müşteriye haber verildi':
       return Colors.tealAccent;
     case 'Teslim edildi':
-      return Colors.grey;
+      return Colors.white;
     default:
       return Colors.redAccent;
   }
@@ -1533,6 +1533,13 @@ class _ServisDetaySayfasiState extends State<ServisDetaySayfasi> {
                       label: Text(d),
                       selected: _durum == d,
                       selectedColor: durumRengi(d).withValues(alpha: 0.35),
+                      labelStyle: TextStyle(
+                        color: durumRengi(d),
+                        fontWeight: d == 'Teslim edildi'
+                            ? FontWeight.w900
+                            : FontWeight.w500,
+                        fontSize: d == 'Teslim edildi' ? 16 : 14,
+                      ),
                       onSelected: (_) => _durumDegistir(d),
                     ))
                 .toList(),
