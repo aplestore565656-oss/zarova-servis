@@ -7,6 +7,7 @@ import 'ayarlar.dart' show UstaSecici;
 import 'foto.dart' show FotoPaneli;
 import 'musteriler.dart' show musteriFormuAc;
 import 'parca_ekle.dart';
+import 'marka.dart';
 import 'servis_formu.dart' show servisFormuYazdir;
 import 'yardimci.dart';
 
@@ -701,6 +702,7 @@ class _ServisFormuState extends State<ServisFormu> {
                     ),
                     const SizedBox(height: 14),
                   ],
+                  MarkaSecici(controller: _marka),
                   _girdi(_marka, 'Cihaz markası'),
                   _girdi(_model, 'Model'),
                   Padding(

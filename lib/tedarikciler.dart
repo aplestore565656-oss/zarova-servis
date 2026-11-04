@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'alislar.dart';
 import 'ana_menu.dart' show YildizArkaplan;
+import 'tedarikci_ekstre.dart';
+import 'tedarikci_kalemler.dart';
 import 'yardimci.dart';
 
 final _db = Supabase.instance.client;
@@ -11,6 +13,8 @@ ThemeData _koyu() => ThemeData(
     colorSchemeSeed: Colors.cyan,
     useMaterial3: true);
 
+String _usd(num n) => '\$${n.toStringAsFixed(2).replaceAll('.', ',')}';
+
 String _borcYazi(double b) => b > 0.004
     ? 'Borç ${para(b)}'
     : (b < -0.004 ? 'Alacak ${para(-b)}' : 'Borç yok');
@@ -18,6 +22,22 @@ String _borcYazi(double b) => b > 0.004
 Color _borcRenk(double b) => b > 0.004
     ? Colors.redAccent
     : (b < -0.004 ? Colors.orangeAccent : Colors.greenAccent);
+
+String _kalemAdi(Map<String, dynamic> k) {
+  final p = k['products'] as Map<String, dynamic>?;
+  final ad = '${p?['name'] ?? ''}'.trim();
+  final bm = '${p?['brand'] ?? ''} ${p?['model'] ?? ''}'.trim();
+  return bm.isEmpty ? ad : '$ad ($bm)';
+}
+
+String _kalemSatiri(Map<String, dynamic> k) {
+  final q = tam(k, 'qty');
+  final usd = '${k['currency']}' == 'USD';
+  final fiyat = usd
+      ? '${_usd(alan(k, 'unit_cost_fx'))} → ${para(alan(k, 'unit_cost'))}'
+      : para(alan(k, 'unit_cost'));
+  return '${_kalemAdi(k)} × $q • $fiyat';
+}
 
 Future<Map<String, dynamic>?> tedarikciFormuAc(BuildContext context,
     {Map<String, dynamic>? mevcut}) async {
@@ -317,6 +337,7 @@ class TedarikciDetaySayfasi extends StatefulWidget {
 class _TedarikciDetaySayfasiState extends State<TedarikciDetaySayfasi> {
   late Map<String, dynamic> _t = widget.tedarikci;
   List<Map<String, dynamic>> _alislar = [];
+  Map<String, List<Map<String, dynamic>>> _kalemler = {};
   List<Map<String, dynamic>> _odemeler = [];
   Map<String, dynamic>? _hesap;
   bool _yukleniyor = true;
@@ -334,12 +355,26 @@ class _TedarikciDetaySayfasiState extends State<TedarikciDetaySayfasi> {
       _hata = null;
     });
     try {
-      final a = await _db
+      final a = List<Map<String, dynamic>>.from(await _db
           .from('purchase_summary')
           .select()
           .eq('supplier_id', _t['id'])
           .order('purchase_date', ascending: false)
-          .order('created_at', ascending: false);
+          .order('created_at', ascending: false));
+      final ids = a.map((x) => '${x['purchase_order_id']}').toList();
+      final km = <String, List<Map<String, dynamic>>>{};
+      if (ids.isNotEmpty) {
+        final k = await _db
+            .from('purchase_order_items')
+            .select(
+                'purchase_order_id, qty, unit_cost, currency, unit_cost_fx, fx_rate, products(name, brand, model)')
+            .inFilter('purchase_order_id', ids)
+            .isFilter('removed_at', null)
+            .order('created_at');
+        for (final x in List<Map<String, dynamic>>.from(k)) {
+          km.putIfAbsent('${x['purchase_order_id']}', () => []).add(x);
+        }
+      }
       final o = await _db
           .from('cash_transactions')
           .select()
@@ -355,7 +390,8 @@ class _TedarikciDetaySayfasiState extends State<TedarikciDetaySayfasi> {
           .maybeSingle();
       if (!mounted) return;
       setState(() {
-        _alislar = List<Map<String, dynamic>>.from(a);
+        _alislar = a;
+        _kalemler = km;
         _odemeler = List<Map<String, dynamic>>.from(o);
         _hesap = h;
         _yukleniyor = false;
@@ -374,6 +410,32 @@ class _TedarikciDetaySayfasiState extends State<TedarikciDetaySayfasi> {
   Future<void> _duzenle() async {
     final guncel = await tedarikciFormuAc(context, mevcut: _t);
     if (guncel != null) setState(() => _t = guncel);
+  }
+
+  Future<void> _ekstre() async {
+    final gun = await showDialog<int>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Ekstre dönemi'),
+        children: [
+          for (final e in {
+            0: 'Tüm hareketler',
+            30: 'Son 30 gün',
+            60: 'Son 60 gün',
+            90: 'Son 90 gün',
+          }.entries)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, e.key),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(e.value, style: const TextStyle(fontSize: 17)),
+              ),
+            ),
+        ],
+      ),
+    );
+    if (gun == null || !mounted) return;
+    await tedarikciEkstresiYazdir(context, _t, gun);
   }
 
   Future<void> _sil() async {
@@ -547,45 +609,11 @@ class _TedarikciDetaySayfasiState extends State<TedarikciDetaySayfasi> {
     }
   }
 
-Future<void> _alisEkle() async {
+  Future<void> _alisEkle() async {
     final s = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
           builder: (_) => AlisFormu(bolum: 'teknik', tedarikci: _t)),
-    );
-    if (s == true) _yukle();
-  }
-
-  // ignore: unused_element
-  Future<void> _eskiAlisEkle() async {
-    final bolum = await showDialog<String>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Hangi bölüm için alış?'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(ctx, 'teknik'),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text('Teknik servis parçası',
-                  style: TextStyle(fontSize: 18)),
-            ),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(ctx, 'aksesuar'),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text('Aksesuar', style: TextStyle(fontSize: 18)),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (bolum == null || !mounted) return;
-    final s = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-          builder: (_) => AlisFormu(bolum: bolum, tedarikci: _t)),
     );
     if (s == true) _yukle();
   }
@@ -619,6 +647,41 @@ Future<void> _alisEkle() async {
     );
   }
 
+  Widget _alisKarti(Map<String, dynamic> a) {
+    final kalemler = _kalemler['${a['purchase_order_id']}'] ?? const [];
+    final usdToplam = kalemler
+        .where((k) => '${k['currency']}' == 'USD')
+        .fold<double>(0.0, (s, k) => s + tam(k, 'qty') * alan(k, 'unit_cost_fx'));
+    return Card(
+      child: ListTile(
+        onTap: () => _alisDetay(a),
+        isThreeLine: kalemler.length > 1,
+        title: Text(tarih('${a['purchase_date']}'),
+            style: const TextStyle(
+                fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
+        subtitle: Text(
+          kalemler.isEmpty
+              ? '${tam(a, 'item_count')} kalem'
+              : kalemler.map(_kalemSatiri).join('\n'),
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+        ),
+        trailing: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(para(alan(a, 'total')),
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 16)),
+            if (usdToplam > 0)
+              Text(_usd(usdToplam),
+                  style: const TextStyle(
+                      fontSize: 12, color: Colors.greenAccent)),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final alisToplam = _hesap == null ? 0.0 : alan(_hesap!, 'total_purchase');
@@ -635,6 +698,10 @@ Future<void> _alisEkle() async {
             backgroundColor: Colors.transparent,
             title: Text('${_t['name']}'),
             actions: [
+              IconButton(
+                  onPressed: _ekstre,
+                  icon: const Icon(Icons.print),
+                  tooltip: 'Hesap ekstresi (PDF)'),
               IconButton(
                   onPressed: _duzenle,
                   icon: const Icon(Icons.edit),
@@ -701,14 +768,25 @@ Future<void> _alisEkle() async {
                       ],
                     ),
                   ),
+                  SizedBox(
+                    height: 46,
+                    child: OutlinedButton.icon(
+                      onPressed: _ekstre,
+                      icon: const Icon(Icons.print),
+                      label: const Text('Hesap ekstresi çıkar (toptancıyla karşılaştır)'),
+                    ),
+                  ),
                   if (_yukleniyor)
-                    const Center(child: CircularProgressIndicator())
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
                   else if (_hata != null)
                     Text(_hata!, style: const TextStyle(color: Colors.redAccent))
                   else ...[
                     const Padding(
-                      padding: EdgeInsets.fromLTRB(4, 8, 4, 6),
-                      child: Text('Alışlar',
+                      padding: EdgeInsets.fromLTRB(4, 12, 4, 6),
+                      child: Text('Aldığımız malzemeler',
                           style: TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold)),
                     ),
@@ -717,18 +795,7 @@ Future<void> _alisEkle() async {
                         padding: EdgeInsets.all(12),
                         child: Text('Henüz alış kaydı yok.'),
                       ),
-                    ..._alislar.map((a) => Card(
-                          child: ListTile(
-                            onTap: () => _alisDetay(a),
-                            title: Text(
-                                '${tarih('${a['purchase_date']}')} • ${bolumAdlari['${a['section']}'] ?? ''}'),
-                            subtitle: Text(
-                                '${tam(a, 'item_count')} kalem • alışta ödenen ${para(alan(a, 'paid'))}'),
-                            trailing: Text(para(alan(a, 'total')),
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 16)),
-                          ),
-                        )),
+                    MalzemeListesi(tedarikci: _t, bakiye: _bakiye, degisti: _yukle),
                     const Padding(
                       padding: EdgeInsets.fromLTRB(4, 16, 4, 6),
                       child: Text('Ödemeler',
@@ -747,7 +814,7 @@ Future<void> _alisEkle() async {
                         child: ListTile(
                           title: Text(para(alan(o, 'amount'))),
                           subtitle: Text(
-                              '${tarih('${o['tx_date']}')} • ${odemeYontemleri['${o['method']}'] ?? ''} • ${alisla ? 'alış sırasında' : 'ayrı ödeme'}${aciklama.isEmpty ? '' : '\n$aciklama'}'),
+                              '${tarih('${o['tx_date']}')} • ${odemeYontemleri['${o['method']}'] ?? ''}${alisla ? ' • alış sırasında' : ''}${aciklama.isEmpty ? '' : '\n$aciklama'}'),
                           trailing: alisla
                               ? null
                               : IconButton(

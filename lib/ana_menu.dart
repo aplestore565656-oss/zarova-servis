@@ -12,6 +12,7 @@ import 'kasa_ozeti.dart';
 import 'kur.dart';
 import 'musteriler.dart';
 import 'ozet.dart';
+import 'alis_listesi.dart';
 import 'alacak_defteri.dart';
 import 'servis_listesi.dart';
 import 'raporlar.dart';
@@ -24,7 +25,7 @@ import 'yedek.dart';
 const uygulamaAdi = 'Zarova Teknik Servis';
 
 /// Her yeni sürümde bu numarayı artırın.
-const uygulamaSurumu = '1.2.0';
+const uygulamaSurumu = '1.3.0';
 
 class _Yildiz {
   final double x, y, boyut, faz;
@@ -175,7 +176,7 @@ const _ogeler = <_Oge>[
   _Oge(Icons.people, 'Müşteriler', _mavi, MusterilerSayfasi()),
   _Oge(Icons.inventory_2, 'Stok ve Parçalar', _mavi,
       UrunlerSayfasi(bolum: 'teknik')),
-  _Oge(Icons.add_shopping_cart, 'Parça Alışları', _mavi, AlislarSayfasi()),
+  _Oge(Icons.add_shopping_cart, 'Parça Alışları', _mavi, AlisListesi()),
   _Oge(Icons.local_shipping, 'Tedarikçiler', _mavi, TedarikcilerSayfasi()),
   _Oge(Icons.account_balance_wallet, 'Kasa', _yesil, KasaSayfasi()),
   _Oge(Icons.menu_book, 'Alacak Defteri', _turuncu, AlacakDefteriSayfasi()),

@@ -299,7 +299,7 @@ class _AlisFormuState extends State<AlisFormu> {
       } else {
         _kur.text = k.satis.toStringAsFixed(4).replaceAll('.', ',');
         _kurNotu =
-            'Kaynak: TCMB döviz satış kuru (${k.tarih}). Kendi kurunuzu yazarak değiştirebilirsiniz.';
+            'Kaynak: Kur kaynağı (${k.tarih}). Kendi kurunuzu yazarak değiştirebilirsiniz.';
       }
     });
   }
