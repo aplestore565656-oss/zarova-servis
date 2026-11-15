@@ -12,6 +12,7 @@ import 'kasa_ozeti.dart';
 import 'kur.dart';
 import 'musteriler.dart';
 import 'ozet.dart';
+import 'guncelleme.dart';
 import 'alis_listesi.dart';
 import 'alacak_defteri.dart';
 import 'servis_listesi.dart';
@@ -25,7 +26,7 @@ import 'yedek.dart';
 const uygulamaAdi = 'Zarova Teknik Servis';
 
 /// Her yeni sürümde bu numarayı artırın.
-const uygulamaSurumu = '1.3.0';
+const uygulamaSurumu = '1.4.0';
 
 class _Yildiz {
   final double x, y, boyut, faz;
@@ -186,7 +187,8 @@ const _ogeler = <_Oge>[
   _Oge(Icons.recycling, 'Hurda Cihazlar', _mavi, HurdaSayfasi()),
   _Oge(Icons.assignment_return, 'İadeler', _mavi, IadelerSayfasi()),
   _Oge(Icons.cloud_download, 'Yedekleme', _mor, YedekSayfasi()),
-  _Oge(Icons.settings, 'Ayarlar', _mor, AyarlarSayfasi()),
+  // Ayarlar üst menüye taşındı
+  // Güncelleme üst menüye taşındı
 ];
 
 class AnaMenu extends StatefulWidget {
@@ -203,6 +205,9 @@ int _yenile = 0;
   void initState() {
     super.initState();
     otomatikYedekKontrol();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) guncellemeKontrol(context, uygulamaSurumu);
+    });
   }
 
   Future<void> _git(Widget sayfa) async {
@@ -259,6 +264,29 @@ int _yenile = 0;
                     ),
                   ],
                 ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Ayarlar',
+                icon: const Icon(Icons.settings),
+                onSelected: (v) {
+                  if (v == 'ayar') {
+                    _git(const AyarlarSayfasi());
+                  } else {
+                    _git(const GuncellemeSayfasi());
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                      value: 'ayar',
+                      child: ListTile(
+                          leading: Icon(Icons.tune),
+                          title: Text('İşletme ayarları'))),
+                  PopupMenuItem(
+                      value: 'guncelleme',
+                      child: ListTile(
+                          leading: Icon(Icons.system_update),
+                          title: Text('Güncelleme'))),
+                ],
               ),
               TextButton.icon(
                 onPressed: () => Supabase.instance.client.auth.signOut(),
