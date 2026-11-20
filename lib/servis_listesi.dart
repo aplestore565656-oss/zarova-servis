@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'alislar.dart' show hataMetni;
+import 'alislar.dart' show hataMetni, odemeYontemleri;
 import 'ana_menu.dart' show YildizArkaplan;
 import 'servisler.dart'
     show ServisFormu, ServisDetaySayfasi, durumRengi, servisDurumlari;
@@ -57,7 +57,7 @@ class _ServisListesiState extends State<ServisListesi> {
     try {
       final v = await _db
           .from('service_orders')
-          .select('*, customers(full_name, phone)')
+          .select('*, customers(full_name, phone), cash_transactions(method, amount, kind, voided_at)')
           .isFilter('deleted_at', null)
           .order('received_at', ascending: false)
           .limit(500);
@@ -347,6 +347,17 @@ class _ServisListesiState extends State<ServisListesi> {
     );
   }
 
+  String _odemeYontemi(Map<String, dynamic> s) {
+    final yontemler = <String>{};
+    for (final c in List<Map<String, dynamic>>.from(
+        s['cash_transactions'] ?? const [])) {
+      if (c['voided_at'] != null || c['kind'] != 'musteri_odeme') continue;
+      final y = odemeYontemleri['${c['method']}'];
+      if (y != null) yontemler.add(y);
+    }
+    return yontemler.join(' + ');
+  }
+
   Widget _kart(Map<String, dynamic> s) {
     final m = s['customers'] as Map<String, dynamic>?;
     final o = _ozet[s['id']];
@@ -354,6 +365,7 @@ class _ServisListesiState extends State<ServisListesi> {
     final toplam = o == null ? 0.0 : alan(o, 'total');
     final odenen = o == null ? 0.0 : alan(o, 'paid');
     final durum = '${s['status']}';
+    final yontem = _odemeYontemi(s);
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: ListTile(
@@ -400,13 +412,13 @@ class _ServisListesiState extends State<ServisListesi> {
               child: _durumYazi(durum),
             ),
             if (kalan > 0.004 && odenen > 0.004)
-              Text('Ödenen ${para(odenen)}',
+              Text('Ödenen ${para(odenen)}${yontem.isEmpty ? '' : ' • $yontem'}',
                   style: const TextStyle(color: Colors.white70, fontSize: 12)),
             if (kalan > 0.004)
               Text('Kalan ${para(kalan)}',
                   style: const TextStyle(color: Colors.redAccent))
             else if (toplam > 0)
-              Text('Ödendi ${para(odenen)}',
+              Text('Ödendi ${para(odenen)}${yontem.isEmpty ? '' : ' • $yontem'}',
                   style: const TextStyle(color: Colors.greenAccent)),
           ],
         ),
